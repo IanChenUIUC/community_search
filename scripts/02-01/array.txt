@@ -1,0 +1,1 @@
+python3 core_decomp/index.py query --edgelist data/raw/empirical/dnc/network.tsv --index output/02-01/dnc.txt --output output/02-01/dnc-0.txt --q 0

@@ -1,0 +1,1 @@
+python3 core_decomp/index.py index --edgelist data/raw/empirical/dnc/network.tsv --output output/02-01/dnc.txt
