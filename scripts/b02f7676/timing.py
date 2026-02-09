@@ -34,20 +34,20 @@ def main():
     basedir = "/u/ianchen3/ianchen3/csearch/output"
 
     index = [
-        f"{basedir}/02-07/{{network}}/index.err",  # CSK (cpp, edgelist)
-        f"{basedir}/02-07/{{network}}/index.err",  # CSK (cpp, nodelist)
-        f"{basedir}/02-08/{{network}}/nk/index.err",  # CSK (python)
+        f"{basedir}/b02f7676/cpp/{{network}}/index.err",  # CSK (cpp, edgelist)
+        f"{basedir}/b02f7676/cpp/{{network}}/index.err",  # CSK (cpp, nodelist)
+        f"{basedir}/b02f7676/py/{{network}}/index.err",  # CSK (python)
     ]
 
     query = [
-        f"{basedir}/02-07/{{network}}/query.err",  # CSK (cpp, edgelist)
-        f"{basedir}/02-08/{{network}}/query.err",  # CSK (cpp, nodelist)
-        f"{basedir}/02-08/{{network}}/nk/query.err",  # CSK (python)
+        f"{basedir}/b02f7676/cpp/{{network}}/edge/query.err",  # CSK (cpp, edgelist)
+        f"{basedir}/b02f7676/cpp/{{network}}/node/query.err",  # CSK (cpp, nodelist)
+        f"{basedir}/b02f7676/py/{{network}}/query.err",  # CSK (python)
     ]
 
     data = []
 
-    with Path("./scripts/02-08/networks.txt").open() as networks:
+    with Path("./scripts/b02f7676/networks.txt").open() as networks:
         for network in networks.readlines():
             network = network.strip()
 
@@ -62,7 +62,7 @@ def main():
                 print(f"Error in {network}: {e}", flush=True)
 
     data = pd.DataFrame(data, columns=["network", "op", "impl", "time"])
-    outfile = Path(f"{basedir}/02-08/analysis/timing.txt")
+    outfile = Path(f"{basedir}/b02f7676/analysis/timing.txt")
     outfile.parent.mkdir(parents=True, exist_ok=True)
     data.to_csv(outfile, index=None)
 

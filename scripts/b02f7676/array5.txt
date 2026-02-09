@@ -1,0 +1,1 @@
+mkdir -p output/b02f7676/cpp/academia_edu/node && /usr/bin/time -v ./binaries/csk-index -s output/b02f7676/cpp/academia_edu/node data/normalized/academia_edu/network.tsv output/b02f7676/cpp/academia_edu/kcore_index.txt output/b02f7676/cpp/academia_edu/query_nodes.txt --nodelist 2> output/b02f7676/cpp/academia_edu/node/query.err

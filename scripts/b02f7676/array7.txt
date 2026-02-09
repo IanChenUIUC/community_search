@@ -1,0 +1,1 @@
+mkdir -p output/b02f7676/py/academia_edu && /usr/bin/time -v python3 ./core_decomp/kcore.py search --edgelist data/normalized/academia_edu/network.tsv --index output/b02f7676/py/academia_edu/kcore_index.txt --nodelist output/02-07/academia_edu/query_nodes.txt --outputdir output/b02f7676/py/academia_edu 2> output/b02f7676/py/academia_edu/query.err

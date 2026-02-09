@@ -1,0 +1,1 @@
+mkdir -p output/b02f7676/cpp/academia_edu && python3 ./scripts/b02f7676/cpp/random_query50.py output/b02f7676/cpp/academia_edu/kcore_index.txt output/b02f7676/cpp/academia_edu/query_nodes.txt

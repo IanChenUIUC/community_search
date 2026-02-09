@@ -1,0 +1,1 @@
+python3 ./scripts/b02f7676/normalize_edgelist.py /u/ianchen3/ianchen3/journal-sbm/datasets/empirical/academia_edu/network.tsv /u/ianchen3/ianchen3/csearch/data/normalized/academia_edu/network.tsv

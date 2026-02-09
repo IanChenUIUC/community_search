@@ -31,22 +31,21 @@ def main():
     basedir = "/u/ianchen3/ianchen3/csearch/output"
 
     outdirs = [
-        f"{basedir}/02-07/{{network}}/{{q}}/kcore_k10.txt",  # CSK (cpp, edgelist)
-        f"{basedir}/02-08/{{network}}/{{q}}/kcore_k10.txt",  # CSK (cpp, nodelist)
-        f"{basedir}/02-08/{{network}}/nk/{{q}}/kcore_k10.txt",  # CSK (python)
+        f"{basedir}/b02f7676/cpp/{{network}}/edge/{{q}}/kcore_k10.txt",  # CSK (cpp, edgelist)
+        f"{basedir}/b02f7676/cpp/{{network}}/node/{{q}}/kcore_k10.txt",  # CSK (cpp, nodelist)
+        f"{basedir}/b02f7676/py/{{network}}/{{q}}/kcore_k10.txt",  # CSK (python)
     ]
 
     # pairwise jaccard distance between 1-2, 1-3, 2-3
     jaccard_distance = []
 
-    with Path("./scripts/02-08/networks.txt").open() as networks:
+    with Path("./scripts/b02f7676/networks.txt").open() as networks:
         for network in networks.readlines():
             network = network.strip()
 
             try:
-                with Path(
-                    f"{basedir}/02-07/{network}/query_nodes.txt"
-                ).open() as queries:
+                querypath = Path(f"{basedir}/b02f7676/cpp/{network}/query_nodes.txt")
+                with querypath.open() as queries:
                     queries = [x.strip().split(" ")[0] for x in queries.readlines()]
 
                 for q in queries:
@@ -70,7 +69,7 @@ def main():
                 print(f"Error in {network}", flush=True)
 
     data = pd.DataFrame(jaccard_distance, columns=["network", "q", "d12", "d13", "d23"])
-    outfile = Path(f"{basedir}/02-08/analysis/summary.txt")
+    outfile = Path(f"{basedir}/b02f7676/analysis/summary.txt")
     outfile.parent.mkdir(parents=True, exist_ok=True)
     data.to_csv(outfile, index=None)
 

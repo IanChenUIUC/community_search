@@ -3,8 +3,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from filelock import FileLock
-
 ENV_ID = "SLURM_ARRAY_TASK_ID"
 
 
@@ -14,13 +12,12 @@ def main():
         return
 
     tasks = Path(sys.argv[1])
-    lock = tasks.with_name(f"{tasks.name}.lock")
 
     if ENV_ID not in os.environ:
         print("[ERR]: not in slurm job array.", file=sys.stderr)
         return
 
-    with FileLock(lock), tasks.open() as f:
+    with tasks.open() as f:
         lines = f.readlines()
 
     numb = int(os.environ[ENV_ID])
