@@ -1,1 +1,1 @@
-mkdir -p output/b02f7676/cpp/academia_edu && /usr/bin/time -v ./binaries/csk-index -i output/b02f7676/cpp/academia_edu/ data/normalized/academia_edu/network.tsv 2> output/b02f7676/cpp/academia_edu/index.err
+mkdir -p output/b02f7676/cpp/academia_edu && /usr/bin/time -v ./scripts/b02f7676/csk-index -i output/b02f7676/cpp/academia_edu/ data/normalized/academia_edu/network.tsv 2> output/b02f7676/cpp/academia_edu/index.err

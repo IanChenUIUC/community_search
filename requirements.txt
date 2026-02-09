@@ -1,0 +1,6 @@
+numba
+networkit
+pandas
+numpy
+click
+scipy

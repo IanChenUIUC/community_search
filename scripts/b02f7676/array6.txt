@@ -1,1 +1,1 @@
-mkdir -p output/b02f7676/py/academia_edu && /usr/bin/time -v python3 ./core_decomp/kcore.py index --edgelist data/normalized/academia_edu/network.tsv --output output/b02f7676/py/academia_edu/kcore_index.txt 2> output/b02f7676/py/academia_edu/index.err
+mkdir -p output/b02f7676/py/academia_edu && /usr/bin/time -v python3 ./scripts/b02f7676/kcore.py index --edgelist data/normalized/academia_edu/network.tsv --output output/b02f7676/py/academia_edu/kcore_index.txt 2> output/b02f7676/py/academia_edu/index.err
