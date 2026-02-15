@@ -6,9 +6,11 @@
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <set>
-#include <stdio.h>
 #include <vector>
+
+// TODO: refactor to using vectors instead of sets whenever possible
 
 Vertex update_uppers(Graph *g, Vertex q, std::vector<Vertex> &uppers)
 {
@@ -31,30 +33,16 @@ Vertex update_uppers(Graph *g, Vertex q, std::vector<Vertex> &uppers)
     return k;
 }
 
-void update_lowers(Graph *graph, std::set<Vertex> &candidates, std::vector<Vertex> &lower)
+void update_lowers(std::map<Vertex, std::set<Vertex>> &graph, Vertex max_degree, std::set<Vertex> &candidates,
+                   std::vector<Vertex> &lower)
 {
-    // TODO: maintain the induced degrees instead of recomputing always
-    // TODO: maintain the induced graph adjacency list
-
-    std::vector<Vertex> sub_degrees(graph->n_nodes);
+    std::vector<std::set<Vertex>> queues(max_degree + 1);
+    std::map<Vertex, Vertex> sub_degrees;
     for (Vertex v : candidates)
     {
-        Vertex *nbrs = neighbors(graph, v);
-        Vertex degree = get_degree(graph, v);
-
-        for (Vertex i = 0; i < degree; ++i)
-            if (candidates.contains(nbrs[i]))
-                sub_degrees[nbrs[i]] += 1;
-    }
-
-    Vertex max_degree = *std::max_element(sub_degrees.begin(), sub_degrees.end());
-    std::vector<std::set<Vertex>> queues(max_degree + 1);
-    for (Vertex v : candidates)
+        sub_degrees[v] = graph[v].size();
         queues[sub_degrees[v]].insert(v);
-
-    // TODO: maintain the indices for each vertex in the list
-    // so that we can use vectors instead of sets
-    // or, use a priority queue lmao
+    }
 
     for (Vertex k = 1; k <= max_degree; ++k)
     {
@@ -65,11 +53,8 @@ void update_lowers(Graph *graph, std::set<Vertex> &candidates, std::vector<Verte
 
             lower[u] = k;
 
-            Vertex *nbrs = neighbors(graph, u);
-            Vertex degree = get_degree(graph, u);
-            for (Vertex j = 0; j < degree; ++j)
+            for (Vertex v : graph[u])
             {
-                Vertex v = nbrs[j];
                 if (candidates.contains(v) && sub_degrees[v] > k)
                 {
                     queues[sub_degrees[v]].erase(v);
@@ -88,6 +73,9 @@ std::set<Vertex> get_comm(Graph *graph, Vertex q, int k)
     std::set<Vertex> need_update;
     std::set<Vertex> candidates, removed, community, frontier;
 
+    std::map<Vertex, std::set<Vertex>> sub_graph;
+    Vertex max_degree = 0;
+
     candidates.insert(q);
     need_update.insert(q);
     uppers[q] = get_degree(graph, q);
@@ -96,17 +84,17 @@ std::set<Vertex> get_comm(Graph *graph, Vertex q, int k)
     for (Vertex i = 0; i < get_degree(graph, q); ++i)
         frontier.insert(q_nbrs[i]);
 
-    for (int i = 0; !need_update.empty(); ++i)
+    while (!need_update.empty())
     {
-        std::cout << "step i=" << i << " candidates size=" << candidates.size()
-                  << " need_updates size=" << need_update.size() << "\n";
+        if (uppers[q] < k)
+            return {};
 
         // stage 0: expand the frontier
         for (Vertex cur : frontier)
             uppers[cur] = get_degree(graph, cur);
 
         // step 1: iterate the lower bounds
-        update_lowers(graph, candidates, lowers);
+        update_lowers(sub_graph, max_degree, candidates, lowers);
 
         // stage 2: iterate the upper bounds
         std::set<Vertex> need_update_next;
@@ -149,18 +137,39 @@ std::set<Vertex> get_comm(Graph *graph, Vertex q, int k)
             for (Vertex i = 0; i < degree; ++i)
             {
                 Vertex u = nbrs[i];
-                if (!candidates.contains(u) && !removed.contains(u) && get_degree(graph, u) >= lowers[q])
+                if (get_degree(graph, u) < lowers[q])
+                    continue;
+
+                if (!candidates.contains(u) && !removed.contains(u))
+                {
                     frontier_next.insert(u);
+                }
+                else
+                {
+                    sub_graph[cur].insert(u);
+                    sub_graph[u].insert(cur);
+
+                    max_degree = std::max(max_degree, sub_graph[cur].size());
+                    max_degree = std::max(max_degree, sub_graph[u].size());
+                }
             }
         }
         std::swap(frontier_next, frontier);
 
         // remove all nodes with UB[cur] < LB[q] out of candidates
-        for (Vertex cur : candidates)
-            if (uppers[cur] < lowers[q])
-                removed.insert(cur);
-        std::erase_if(candidates, [&](Vertex cur) { return uppers[cur] < lowers[q]; });
+        std::erase_if(candidates, [&](Vertex v) {
+            if (uppers[v] >= lowers[q])
+                return false;
+
+            removed.insert(v);
+            for (Vertex u : sub_graph[v])
+                sub_graph[u].erase(v);
+            sub_graph.erase(v);
+
+            return true;
+        });
     }
+
     return candidates;
 }
 
@@ -168,11 +177,7 @@ void write_comm(char *maindir, Vertex q, Vertex k, std::set<Vertex> &comm)
 {
     std::filesystem::path dir = std::filesystem::path(maindir) / std::to_string(q);
     std::filesystem::path path = dir / std::format("kcore_{}.txt", k);
-    if (!std::filesystem::create_directories(dir))
-    {
-        fprintf(stderr, "Could not create directory\n");
-        exit(1);
-    }
+    std::filesystem::create_directories(dir);
 
     std::ofstream file(path.string());
     for (Vertex v : comm)
