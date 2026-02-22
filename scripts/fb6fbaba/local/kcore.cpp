@@ -72,6 +72,38 @@ void update_lowers(std::map<Vertex, std::set<Vertex>> &graph, Vertex max_degree,
     }
 }
 
+Vertex compute_count(Graph *graph, Vertex cur, std::set<Vertex> &candidates, std::vector<Vertex> &uppers)
+{
+    Vertex count = 0;
+    for (Vertex i = 0; i < get_degree(graph, cur); ++i)
+    {
+        Vertex u = neighbors(graph, cur)[i];
+        if (!candidates.contains(u))
+            continue;
+
+        if (uppers[cur] <= uppers[u])
+            ++count;
+    }
+
+    return count;
+}
+
+void update_nbr_count(Graph *graph, Vertex cur, Vertex c_old, std::set<Vertex> &candidates, std::vector<Vertex> &uppers,
+                      std::vector<Vertex> &counts, std::set<Vertex> &need_update_next)
+{
+    for (Vertex i = 0; i < get_degree(graph, cur); ++i)
+    {
+        Vertex u = neighbors(graph, cur)[i];
+        if (!candidates.contains(u))
+            continue;
+
+        if (uppers[cur] < uppers[u] && uppers[u] <= c_old)
+            --counts[u];
+        if (counts[u] < uppers[u])
+            need_update_next.insert(u);
+    }
+}
+
 std::set<Vertex> get_comm(Graph *graph, Vertex q, Vertex k)
 {
     std::vector<Vertex> lowers(graph->n_nodes), uppers(graph->n_nodes);
@@ -86,107 +118,97 @@ std::set<Vertex> get_comm(Graph *graph, Vertex q, Vertex k)
     need_update.insert(q);
     uppers[q] = get_degree(graph, q);
 
-    Vertex *q_nbrs = neighbors(graph, q);
     for (Vertex i = 0; i < get_degree(graph, q); ++i)
-        frontier.insert(q_nbrs[i]);
+        frontier.insert(neighbors(graph, q)[i]);
+    for (Vertex cur : frontier)
+        uppers[cur] = get_degree(graph, cur);
 
     while (!need_update.empty())
     {
         if (uppers[q] < k)
+        {
+            std::cout << "Query " << q << " Considered " << removed.size() + candidates.size() << " Outputted 0\n";
             return {};
+        }
 
-        // stage 0: expand the frontier
-        for (Vertex cur : frontier)
-            uppers[cur] = get_degree(graph, cur);
+        std::set<Vertex> need_update_next;
+        std::set<Vertex> frontier_next;
 
         // step 1: iterate the lower bounds
         update_lowers(sub_graph, max_degree, candidates, lowers);
 
         // stage 2: iterate the upper bounds
-        std::set<Vertex> need_update_next;
         for (Vertex cur : need_update)
         {
-            Vertex degree = get_degree(graph, cur);
-            Vertex *nbrs = neighbors(graph, cur);
-
             Vertex c_old = uppers[cur];
             Vertex c_new = update_uppers(graph, cur, removed, uppers);
             uppers[cur] = c_new;
 
-            counts[cur] = 0;
-            for (Vertex i = 0; i < degree; ++i)
-            {
-                Vertex u = nbrs[i];
-                if (!candidates.contains(u))
-                    continue;
-
-                if (uppers[cur] < uppers[u] && uppers[u] <= c_old)
-                    --counts[u];
-                if (counts[u] < uppers[u])
-                    need_update_next.insert(u);
-                if (uppers[cur] <= uppers[u])
-                    ++counts[cur];
-            }
+            compute_count(graph, cur, candidates, uppers);
+            update_nbr_count(graph, cur, c_old, candidates, uppers, counts, need_update_next);
         }
-        std::swap(need_update_next, need_update);
 
         // step 3: figure out the updates for next iteration
-        std::set<Vertex> frontier_next;
+        // 3a: expand the frontier
         for (Vertex cur : frontier)
         {
             candidates.insert(cur);
-            need_update.insert(cur);
+            need_update_next.insert(cur);
 
-            Vertex degree = get_degree(graph, cur);
-            Vertex *nbrs = neighbors(graph, cur);
-            for (Vertex i = 0; i < degree; ++i)
+            for (Vertex i = 0; i < get_degree(graph, cur); ++i)
             {
-                Vertex u = nbrs[i];
+                Vertex u = neighbors(graph, cur)[i];
+                if (candidates.contains(u) || removed.contains(u) || frontier.contains(u))
+                    continue;
 
                 if (get_degree(graph, u) < std::min(k, lowers[q]))
                 {
-                    // TODO: counts and updates
                     removed.insert(u);
-                    continue;
-                }
-
-                if (!candidates.contains(u) && !removed.contains(u))
-                {
-                    frontier_next.insert(u);
                 }
                 else
                 {
+                    frontier_next.insert(u);
+
                     sub_graph[cur].insert(u);
                     sub_graph[u].insert(cur);
-
                     max_degree = std::max(max_degree, sub_graph[cur].size());
                     max_degree = std::max(max_degree, sub_graph[u].size());
                 }
             }
         }
-        std::swap(frontier_next, frontier);
 
-        // remove all nodes with UB[cur] < LB[q] out of candidates
-        std::erase_if(candidates, [&](Vertex v) {
-            if (uppers[v] >= lowers[q])
+        // 3b: prune candidates for UB[cur] >= LB[q]
+        std::erase_if(candidates, [&](Vertex cur) {
+            if (uppers[cur] >= lowers[q])
                 return false;
 
-            removed.insert(v);
-            for (Vertex u : sub_graph[v])
-                sub_graph[u].erase(v);
-            sub_graph.erase(v);
+            Vertex c_old = uppers[cur];
+            uppers[cur] = 0;
+            update_nbr_count(graph, cur, c_old, candidates, uppers, counts, need_update_next);
+
+            removed.insert(cur);
+            for (Vertex u : sub_graph[cur])
+                sub_graph[u].erase(cur);
+            sub_graph.erase(cur);
 
             return true;
         });
+
+        // 3c: prune candidates for connected
+        // TODO
+
+        std::swap(need_update_next, need_update);
+        std::swap(frontier_next, frontier);
     }
 
     std::set<Vertex> community;
     for (Vertex cur : candidates)
     {
-        std::cout << lowers[cur] << "<=Core(" << cur << ")<=" << uppers[cur] << "\n";
+        std::cout << lowers[cur] << "<=Core(" << cur << ")<=" << uppers[cur] << std::endl;
+        community.insert(cur);
+
         assert(lowers[cur] == uppers[cur]);
-        if (lowers[cur] >= lowers[q])
-            community.insert(cur);
+        assert(lowers[cur] >= lowers[q]);
     }
 
     std::cout << "Query " << q << " " << lowers[q] << "<=Core(q)<=" << uppers[q] << " Considered "
