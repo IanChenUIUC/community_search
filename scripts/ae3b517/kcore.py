@@ -7,51 +7,34 @@ import pandas as pd
 import scipy.sparse as sp
 
 
-def find_kcore(graph, cores, repr, nbrs, q, k, n):
+def find_kcore(g, cores, repr, nbrs, q, k, n):
     visited = np.zeros(n, dtype=np.uint8)
     output = []
     stack = []
-
-    def extend(v):
-        remove = []
-        for k1, adj in nbrs[v].items():
-            if k1 < k:
-                continue
-
-            adj = np.array(adj, dtype=np.int64)
-            adj = adj[visited[adj] == 0]
-            visited[adj] = 1
-            stack.extend(adj)
-            remove.append(k1)
-        for k1 in remove:
-            del nbrs[v][k1]
 
     visited[repr[q]] = 1
     stack.append(repr[q])
 
     while len(stack) > 0:
         v = stack.pop()
-
-        if repr[v] != v:
-            output.append(repr[v])
-            extend(repr[v])
-            continue
-
         output.append(repr[v])
-        repr[v] = repr[q]
 
-        for i in range(graph.indptr[v], graph.indptr[v + 1]):
-            u = graph.indices[i]
+        if repr[v] != q and repr[v] in nbrs:
+            adj = nbrs[repr[v]]
+            del nbrs[repr[v]]
+        else:
+            adj = g.indices[g.indptr[v] : g.indptr[v + 1]]
+        repr[v] = q
 
+        for u in adj:
             if visited[repr[u]]:
                 continue
 
             visited[repr[u]] = 1
             if cores[u] < k:
-                assert repr[u] == u
-                nbrs[q][cores[u]].append(u)
+                nbrs[q].append(repr[u])
             else:
-                stack.append(u)
+                stack.append(repr[u])
 
     return output
 
@@ -99,25 +82,26 @@ def search(edgelist, index, nodelist, outputdir):
     query_df.sort_values(by="k", ascending=False, inplace=True)
 
     repr = np.arange(n, dtype=np.int64)
-    nbrs = {q: defaultdict(list) for q in query_df["q"]}
+    nbrs = defaultdict(list)
     components = {}
 
     def print_kcore(q, k, outfile):
         if cores[q] < k:
             return
 
-        contracted = find_kcore(g, cores, repr, nbrs, q, k, n)
-        comp = []
-        for v in contracted:
-            if repr[v] in components:
-                comp.extend(components[repr[v]])
-            else:
-                comp.append(v)
+        stack = find_kcore(g, cores, repr, nbrs, q, k, n)
+        comp = set()
+        # redundant = 0
+        while stack:
+            v = stack.pop()
+            other = components[v] if v in components and v not in comp else {v}
+            # redundant += len(comp.intersection(other))
+            comp.update(other)
 
-        print(f"{q=} {len(comp)=} {len(set(comp))=}")
+        # print(f"{q=} {len(comp)=} {redundant=}")
 
-        components[q] = comp
-        outfile.write("\n".join(map(str, components[q])))
+        components[q] = list(comp)
+        outfile.write("\n".join(map(str, comp)))
 
     for _, query in query_df.iterrows():
         q = int(query["q"])
