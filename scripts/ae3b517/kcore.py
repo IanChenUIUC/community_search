@@ -27,7 +27,7 @@ def ds_find(q: int, ds: np.ndarray):
 def ds_union(q1: int, q2: int, ds: np.ndarray):
     root1 = ds_find(q1)
     root2 = ds_find(q2)
-    if root1 != root2:
+    if root1 == root2:
         return
     if (-ds[root1]) < (-ds[root2]):
         root1, root2 = root2, root1
@@ -49,14 +49,17 @@ def find_kcore(indices, indptr, cores, repr, ds, nbrs, q, k, n):
             if k1 < k:
                 continue
             for u in adj:
-                visited[u] = 1
-                stack[sidx] = u
-                sidx += 1
+                if visited[u] == 0:
+                    visited[u] = 1
+                    stack[sidx] = u
+                    sidx += 1
 
     if repr[q] != -1:
         extend(repr[q])
         q = repr[q]
         nbrs[q] = numba.typed.Dict.empty(numba.types.int64, ADJACENCY)
+        out[oidx] = q
+        oidx += 1
     else:
         stack[sidx] = q
         sidx += 1
@@ -65,18 +68,20 @@ def find_kcore(indices, indptr, cores, repr, ds, nbrs, q, k, n):
     while sidx > 0:
         sidx -= 1
         v = stack[sidx]
-        out[oidx] = v
-        oidx += 1
 
         if repr[v] != -1 and visited[repr[v]] == 0:
             visited[repr[v]] = 1
             extend(repr[v])
+            out[oidx] = repr[v]
+            oidx += 1
         else:
+            out[oidx] = v
+            oidx += 1
             repr[v] = q
 
         for i in range(indptr[v], indptr[v + 1]):
             u = indices[i]
-            if visited[u] or repr[u] != -1:
+            if visited[u]:
                 continue
 
             if cores[u] >= k:
@@ -87,6 +92,7 @@ def find_kcore(indices, indptr, cores, repr, ds, nbrs, q, k, n):
                 k1 = cores[u]
                 if k1 not in nbrs[q]:
                     nbrs[q][k1] = numba.typed.List.empty_list(numba.types.int64)
+                # TODO: reduce redundancy here?
                 nbrs[q][k1].append(u)
 
     return out[:oidx]
@@ -134,7 +140,6 @@ def search(edgelist, index, nodelist, outputdir):
     ds = np.full(n, -1)  # union-by-size
 
     repr = np.full(n, -1, dtype=np.int64)
-
     nbrs = numba.typed.Dict.empty(numba.types.int64, FRONTIER_PARTITION)
     for q in query_df["q"]:
         nbrs[q] = numba.typed.Dict.empty(numba.types.int64, ADJACENCY)
@@ -146,13 +151,12 @@ def search(edgelist, index, nodelist, outputdir):
             return
 
         components[q] = find_kcore(g.indices, g.indptr, cores, repr, ds, nbrs, q, k, n)
-        for c in components[q]:
-            root = ds_find(c, ds)
-            if root in components and root != q:
-                outfile.write("\n".join(map(str, components[root])))
-                outfile.write("\n")
-            else:
-                outfile.write(f"{c}\n")
+        comp = set(components[q])
+        for q1 in components:
+            if q1 in comp:
+                comp = comp.union(components[q1])
+        components[q] = comp
+        outfile.write("\n".join(map(str, components[q])))
 
     for _, query in query_df.iterrows():
         q = int(query["q"])
