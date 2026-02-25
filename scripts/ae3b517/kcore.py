@@ -12,12 +12,16 @@ def find_kcore(g, cores, repr, nbrs, q, k, n):
     output = []
     stack = []
 
+    num_steps = 0
+
     visited[repr[q]] = 1
     stack.append(repr[q])
 
     while len(stack) > 0:
         v = stack.pop()
         output.append(repr[v])
+
+        num_steps += 1
 
         if repr[v] != q and repr[v] in nbrs:
             adj = nbrs[repr[v]]
@@ -27,6 +31,8 @@ def find_kcore(g, cores, repr, nbrs, q, k, n):
         repr[v] = q
 
         for u in adj:
+            num_steps += 1
+
             if visited[repr[u]]:
                 continue
 
@@ -36,7 +42,7 @@ def find_kcore(g, cores, repr, nbrs, q, k, n):
             else:
                 stack.append(repr[u])
 
-    return output
+    return output, num_steps
 
 
 @click.group()
@@ -89,18 +95,18 @@ def search(edgelist, index, nodelist, outputdir):
         if cores[q] < k:
             return
 
-        stack = find_kcore(g, cores, repr, nbrs, q, k, n)
+        stack, steps = find_kcore(g, cores, repr, nbrs, q, k, n)
         comp = set()
-        # redundant = 0
         while stack:
             v = stack.pop()
             other = components[v] if v in components and v not in comp else {v}
-            # redundant += len(comp.intersection(other))
+            steps += len(other)
             comp.update(other)
 
-        # print(f"{q=} {len(comp)=} {redundant=}")
+        comm_size = len(comp) + sum(g.indptr[v + 1] - g.indptr[v] for v in comp)
+        print(f"{q=} {len(comp)=} {steps=} {comm_size=}")
 
-        components[q] = list(comp)
+        components[q] = comp
         outfile.write("\n".join(map(str, comp)))
 
     for _, query in query_df.iterrows():
