@@ -1,101 +1,66 @@
+from collections import defaultdict
 from pathlib import Path
 
 import click
-import networkit as nk
-import numba
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
-ADJACENCY = numba.types.ListType(numba.types.int64)
-FRONTIER_PARTITION = numba.types.DictType(numba.types.int64, ADJACENCY)
 
-
-@numba.njit
-def ds_find(q: int, ds: np.ndarray):
-    root = q
-    while ds[root] >= 0:
-        root = ds[root]
-    while q != root:
-        parent = ds[q]
-        ds[q] = root
-        q = parent
-    return root
-
-
-@numba.njit
-def ds_union(q1: int, q2: int, ds: np.ndarray):
-    root1 = ds_find(q1)
-    root2 = ds_find(q2)
-    if root1 == root2:
-        return
-    if (-ds[root1]) < (-ds[root2]):
-        root1, root2 = root2, root1
-    ds[root1] += ds[root2]  # adding size
-    ds[root2] = root1  # setting parents
-
-
-@numba.njit
-def find_kcore(indices, indptr, cores, repr, ds, nbrs, q, k, n):
+def find_kcore(graph, cores, repr, nbrs, q, k, n):
     visited = np.zeros(n, dtype=np.uint8)
-    stack = np.empty(n, dtype=np.int64)
-    sidx = 0
-    out = np.empty(n, dtype=np.int64)
-    oidx = 0
+    output = []
+    stack = []
 
     def extend(v):
-        nonlocal sidx
+        remove = []
         for k1, adj in nbrs[v].items():
             if k1 < k:
                 continue
-            for u in adj:
-                if visited[u] == 0:
-                    visited[u] = 1
-                    stack[sidx] = u
-                    sidx += 1
 
-    if repr[q] != -1:
-        extend(repr[q])
-        q = repr[q]
-        nbrs[q] = numba.typed.Dict.empty(numba.types.int64, ADJACENCY)
-        out[oidx] = q
-        oidx += 1
-    else:
-        stack[sidx] = q
-        sidx += 1
+            adj = np.array(adj, dtype=np.int64)
+            adj = adj[visited[adj] == 0]
+            visited[adj] = 1
+            stack.extend(adj)
+            remove.append(k1)
+        for k1 in remove:
+            del nbrs[v][k1]
 
-    visited[q] = 1
-    while sidx > 0:
-        sidx -= 1
-        v = stack[sidx]
+    q0 = q if repr[q] == -1 else repr[q]
+    visited[q0] = 1
+    stack.append(q0)
 
-        if repr[v] != -1 and visited[repr[v]] == 0:
-            visited[repr[v]] = 1
+    while len(stack) > 0:
+        v = stack.pop()
+
+        if repr[v] != -1:
+            output.append(repr[v])
             extend(repr[v])
-            out[oidx] = repr[v]
-            oidx += 1
-        else:
-            out[oidx] = v
-            oidx += 1
-            repr[v] = q
+            continue
 
-        for i in range(indptr[v], indptr[v + 1]):
-            u = indices[i]
-            if visited[u]:
+        repr[v] = q
+        output.append(v)
+
+        # adj = graph.induces[graph.indptr[v], graph.indptr[v + 1]]
+        # adj = adj[visited[adj] == 0]
+        # assert np.all(repr[adj] == -1)
+        # ...
+
+        for i in range(graph.indptr[v], graph.indptr[v + 1]):
+            u = graph.indices[i]
+            u0 = u if repr[u] == -1 else repr[u]
+
+            if visited[u0]:
                 continue
 
-            if cores[u] >= k:
-                stack[sidx] = u
-                sidx += 1
-                visited[u] = 1
+            visited[u0] = 1
+            if cores[u0] < k:
+                assert repr[u] == -1
+                nbrs[q][cores[u0]].append(u0)
             else:
-                k1 = cores[u]
-                if k1 not in nbrs[q]:
-                    nbrs[q][k1] = numba.typed.List.empty_list(numba.types.int64)
-                # TODO: reduce redundancy here?
-                nbrs[q][k1].append(u)
+                stack.append(u0)
 
-    return out[:oidx]
+    return output
 
 
 @click.group()
@@ -107,6 +72,8 @@ def kcore():
 @click.option("--edgelist", required=True, type=click.Path(exists=True))
 @click.option("--output", required=True, type=click.Path())
 def index(edgelist, output):
+    import networkit as nk
+
     graph = nk.graphio.EdgeListReader("\t", 0).read(edgelist)
     core = nk.centrality.CoreDecomposition(graph).run()
 
@@ -137,24 +104,25 @@ def search(edgelist, index, nodelist, outputdir):
     default_k = pd.Series(cores[query_df["q"].values], index=query_df.index)
     query_df["k"] = query_df["k"].fillna(default_k)
     query_df.sort_values(by="k", ascending=False, inplace=True)
-    ds = np.full(n, -1)  # union-by-size
 
     repr = np.full(n, -1, dtype=np.int64)
-    nbrs = numba.typed.Dict.empty(numba.types.int64, FRONTIER_PARTITION)
-    for q in query_df["q"]:
-        nbrs[q] = numba.typed.Dict.empty(numba.types.int64, ADJACENCY)
-
+    nbrs = {q: defaultdict(list) for q in query_df["q"]}
     components = {}
 
     def print_kcore(q, k, outfile):
         if cores[q] < k:
             return
 
-        components[q] = find_kcore(g.indices, g.indptr, cores, repr, ds, nbrs, q, k, n)
-        comp = set(components[q])
-        for q1 in components:
-            if q1 in comp:
-                comp = comp.union(components[q1])
+        contracted = find_kcore(g, cores, repr, nbrs, q, k, n)
+        comp = []
+        for v in contracted:
+            if repr[v] != q:
+                comp.extend(components[repr[v]])
+            else:
+                comp.append(v)
+
+        print(f"{q=} {len(comp)=} {len(set(comp))=}")
+
         components[q] = comp
         outfile.write("\n".join(map(str, components[q])))
 
