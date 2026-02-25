@@ -2,11 +2,94 @@ from pathlib import Path
 
 import click
 import networkit as nk
-
-# import numba
+import numba
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
+
+ADJACENCY = numba.types.ListType(numba.types.int64)
+FRONTIER_PARTITION = numba.types.DictType(numba.types.int64, ADJACENCY)
+
+
+@numba.njit
+def ds_find(q: int, ds: np.ndarray):
+    root = q
+    while ds[root] >= 0:
+        root = ds[root]
+    while q != root:
+        parent = ds[q]
+        ds[q] = root
+        q = parent
+    return root
+
+
+@numba.njit
+def ds_union(q1: int, q2: int, ds: np.ndarray):
+    root1 = ds_find(q1)
+    root2 = ds_find(q2)
+    if root1 != root2:
+        return
+    if (-ds[root1]) < (-ds[root2]):
+        root1, root2 = root2, root1
+    ds[root1] += ds[root2]  # adding size
+    ds[root2] = root1  # setting parents
+
+
+@numba.njit
+def find_kcore(indices, indptr, cores, repr, ds, nbrs, q, k, n):
+    visited = np.zeros(n, dtype=np.uint8)
+    stack = np.empty(n, dtype=np.int64)
+    sidx = 0
+    out = np.empty(n, dtype=np.int64)
+    oidx = 0
+
+    def extend(v):
+        nonlocal sidx
+        for k1, adj in nbrs[v].items():
+            if k1 < k:
+                continue
+            for u in adj:
+                visited[u] = 1
+                stack[sidx] = u
+                sidx += 1
+
+    if repr[q] != -1:
+        extend(repr[q])
+        q = repr[q]
+        nbrs[q] = numba.typed.Dict.empty(numba.types.int64, ADJACENCY)
+    else:
+        stack[sidx] = q
+        sidx += 1
+
+    visited[q] = 1
+    while sidx > 0:
+        sidx -= 1
+        v = stack[sidx]
+        out[oidx] = v
+        oidx += 1
+
+        if repr[v] != -1 and visited[repr[v]] == 0:
+            visited[repr[v]] = 1
+            extend(repr[v])
+        else:
+            repr[v] = q
+
+        for i in range(indptr[v], indptr[v + 1]):
+            u = indices[i]
+            if visited[u] or repr[u] != -1:
+                continue
+
+            if cores[u] >= k:
+                stack[sidx] = u
+                sidx += 1
+                visited[u] = 1
+            else:
+                k1 = cores[u]
+                if k1 not in nbrs[q]:
+                    nbrs[q][k1] = numba.typed.List.empty_list(numba.types.int64)
+                nbrs[q][k1].append(u)
+
+    return out[:oidx]
 
 
 @click.group()
@@ -39,7 +122,7 @@ def search(edgelist, index, nodelist, outputdir):
     row = np.concatenate([edges[:, 0], edges[:, 1]])
     col = np.concatenate([edges[:, 1], edges[:, 0]])
     data = np.ones(2 * len(edges), dtype=np.int8)
-    graph = sp.coo_matrix((data, (row, col)), shape=(n, n)).tocsr()
+    g = sp.coo_matrix((data, (row, col)), shape=(n, n)).tocsr()
 
     cores = pd.read_csv(index, sep="\t", header=None, names=["node", "core"])
     cores = cores.sort_values("node")["core"].to_numpy()
@@ -48,83 +131,25 @@ def search(edgelist, index, nodelist, outputdir):
     default_k = pd.Series(cores[query_df["q"].values], index=query_df.index)
     query_df["k"] = query_df["k"].fillna(default_k)
     query_df.sort_values(by="k", ascending=False, inplace=True)
+    ds = np.full(n, -1)  # union-by-size
 
-    queries = np.unique(query_df["q"].to_numpy())
-    num_queries = len(queries)
-    query_map = dict(zip(queries, np.arange(num_queries)))
-    ds = np.full(num_queries, -1)  # union-by-size
+    repr = np.full(n, -1, dtype=np.int64)
 
-    def ds_find(q):
-        q = query_map[q]
-
-        root = q
-        while ds[root] >= 0:
-            assert root != ds[root]
-            root = ds[root]
-        while q != root:
-            assert q != ds[q]
-            parent = ds[q]
-            ds[q] = root
-            q = parent
-
-        return queries[root]
-
-    def ds_union(q1, q2):
-        root1 = query_map[ds_find(q1)]
-        root2 = query_map[ds_find(q2)]
-        if root1 != root2:
-            return
-        if (-ds[root1]) < (-ds[root2]):
-            root1, root2 = root2, root1
-        ds[root1] += ds[root2]  # adding size
-        ds[root2] = root1  # setting parents
+    nbrs = numba.typed.Dict.empty(numba.types.int64, FRONTIER_PARTITION)
+    for q in query_df["q"]:
+        nbrs[q] = numba.typed.Dict.empty(numba.types.int64, ADJACENCY)
 
     components = {}
-    repr = np.full(n, -1, dtype=np.int64)
-    nbrs = {q: {} for q in queries}
-
-    def find_kcore(q, k):
-        if cores[q] < k:
-            return set()
-        if repr[q] != -1:
-            return {repr[q]}
-
-        visited = set()
-        stack = [q]
-        while stack:
-            v = stack.pop()
-            if repr[v] != -1 and repr[v] not in visited:
-                ds_union(q, repr[v])
-                visited.add(repr[v])
-                for k1 in range(k, cores[repr[v]]):
-                    stack.extend(nbrs[repr[v]].get(k1, []))
-            else:
-                visited.add(v)
-                repr[v] = q
-            visited.add(v)
-
-            for i in range(graph.indptr[v], graph.indptr[v + 1]):
-                u = graph.indices[i]
-                if u in visited or repr[u] != -1:
-                    continue
-
-                if cores[u] >= k:
-                    stack.append(u)
-                    visited.add(u)
-                else:
-                    k1 = cores[u]
-                    if k1 not in nbrs[q]:
-                        nbrs[q][k1] = []
-                    nbrs[q][k1].append(u)
-
-        return visited
 
     def print_kcore(q, k, outfile):
-        components[q] = find_kcore(q, k)
+        if cores[q] < k:
+            return
 
+        components[q] = find_kcore(g.indices, g.indptr, cores, repr, ds, nbrs, q, k, n)
         for c in components[q]:
-            if c in query_map and ds_find(c) in components:
-                outfile.write("\n".join(map(str, components[ds_find(c)])))
+            root = ds_find(c, ds)
+            if root in components and root != q:
+                outfile.write("\n".join(map(str, components[root])))
                 outfile.write("\n")
             else:
                 outfile.write(f"{c}\n")
