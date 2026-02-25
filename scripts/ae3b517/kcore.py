@@ -26,39 +26,32 @@ def find_kcore(graph, cores, repr, nbrs, q, k, n):
         for k1 in remove:
             del nbrs[v][k1]
 
-    q0 = q if repr[q] == -1 else repr[q]
-    visited[q0] = 1
-    stack.append(q0)
+    visited[repr[q]] = 1
+    stack.append(repr[q])
 
     while len(stack) > 0:
         v = stack.pop()
 
-        if repr[v] != -1:
+        if repr[v] != v:
             output.append(repr[v])
             extend(repr[v])
             continue
 
-        repr[v] = q
-        output.append(v)
-
-        # adj = graph.induces[graph.indptr[v], graph.indptr[v + 1]]
-        # adj = adj[visited[adj] == 0]
-        # assert np.all(repr[adj] == -1)
-        # ...
+        output.append(repr[v])
+        repr[v] = repr[q]
 
         for i in range(graph.indptr[v], graph.indptr[v + 1]):
             u = graph.indices[i]
-            u0 = u if repr[u] == -1 else repr[u]
 
-            if visited[u0]:
+            if visited[repr[u]]:
                 continue
 
-            visited[u0] = 1
-            if cores[u0] < k:
-                assert repr[u] == -1
-                nbrs[q][cores[u0]].append(u0)
+            visited[repr[u]] = 1
+            if cores[u] < k:
+                assert repr[u] == u
+                nbrs[q][cores[u]].append(u)
             else:
-                stack.append(u0)
+                stack.append(u)
 
     return output
 
@@ -105,7 +98,7 @@ def search(edgelist, index, nodelist, outputdir):
     query_df["k"] = query_df["k"].fillna(default_k)
     query_df.sort_values(by="k", ascending=False, inplace=True)
 
-    repr = np.full(n, -1, dtype=np.int64)
+    repr = np.arange(n, dtype=np.int64)
     nbrs = {q: defaultdict(list) for q in query_df["q"]}
     components = {}
 
@@ -116,7 +109,7 @@ def search(edgelist, index, nodelist, outputdir):
         contracted = find_kcore(g, cores, repr, nbrs, q, k, n)
         comp = []
         for v in contracted:
-            if repr[v] != q:
+            if repr[v] in components:
                 comp.extend(components[repr[v]])
             else:
                 comp.append(v)
