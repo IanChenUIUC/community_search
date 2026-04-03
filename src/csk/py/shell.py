@@ -1,5 +1,8 @@
+import dataclasses
 from dataclasses import dataclass
+from pathlib import Path
 
+import click
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
@@ -34,6 +37,42 @@ class ShellStruct:
     rmq_pos: np.ndarray[tuple[int, int], np.dtype[np.int32]]
     rmq_tour: np.ndarray
     rmq_depths: np.ndarray
+
+
+def save_shell(shell: ShellStruct, filename: str):
+    Path(filename).parent.mkdir(parents=True, exist_ok=True)
+    d = {}
+    for field_name, value in shell.__dict__.items():
+        if isinstance(value, sp.csr_array):
+            d[f"{field_name}_data"] = value.data
+            d[f"{field_name}_indices"] = value.indices
+            d[f"{field_name}_indptr"] = value.indptr
+            d[f"{field_name}_shape"] = value.shape
+        else:
+            d[field_name] = value
+    np.savez_compressed(filename, **d)
+
+
+def load_shell(filename: str):
+    with np.load(filename, allow_pickle=True) as loader:
+        d = {}
+        for field in dataclasses.fields(ShellStruct):
+            name = field.name
+            if f"{name}_data" in loader:
+                d[name] = sp.csr_array(
+                    (
+                        loader[f"{name}_data"],
+                        loader[f"{name}_indices"],
+                        loader[f"{name}_indptr"],
+                    ),
+                    shape=tuple(loader[f"{name}_shape"]),
+                )
+            elif name in loader:
+                d[name] = loader[name]
+            else:
+                raise AssertionError
+
+    return ShellStruct(**d)
 
 
 @dataclass(slots=True)
@@ -182,12 +221,13 @@ def build_shell(
     for k in reversed(np.unique(cores)):
         # 2. find the vertices of each node in this shell
         v_beg, v_end = v_indices[k - 1], v_indices[k]
-        shell = graph[v_beg:v_end, v_beg:v_end]  # FIXME: this is probably a bottleneck
+        shell_vertices = new_vertices[v_beg:v_end]
+        shell = graph[v_beg:v_end, v_beg:v_end]
         n_cc, l_cc = cs.connected_components(shell)
 
         for cc in range(n_cc):
             # 3. create the new node
-            nodes = new_vertices[v_beg:v_end][l_cc == cc]
+            nodes = shell_vertices[l_cc == cc]
             new_nodes = nodes[~seen[nodes]]
             node_rows.extend(np.full_like(nodes, node_id))
             node_cols.extend(nodes)
@@ -245,29 +285,7 @@ def get_indexer(shell) -> pd.Index:
     return pd.Index(shell.vertices)
 
 
-def find_community(
-    shell: ShellStruct, query: np.ndarray, k_min: int, indexer=None
-) -> np.ndarray:
-    """
-    @params
-        shell: computed ShellStruct
-        query: a set of nodes (original IDs)
-        kMin: the minimum coreness of community to return
-        indexer: optional precomputed structure to convert from user to internal queries
-    @returns
-        the node list (original IDs) solving the k-core query problem
-        or an empty list, if coreness(Q) <= kmin
-    """
-
-    def get_vertices(node: int) -> np.ndarray:
-        """all vertices in subtree of node"""
-        data, stack = [], [node]
-        while stack:
-            ele = stack.pop()
-            stack.extend(get_data(shell.children, ele))
-            data.extend(get_data(shell.nodes, ele))
-        return np.array(data)
-
+def find_lca(shell: ShellStruct, query: np.ndarray, indexer=None) -> np.ndarray:
     if indexer is None:
         indexer = get_indexer(shell)
 
@@ -280,11 +298,116 @@ def find_community(
     lca = shell.rmq_tour[idx[np.argmin(shell.rmq_depths[idx])]]
     kval = shell.coreness[lca]
 
-    if kval < k_min:
-        return np.array([])
-
     parent = shell.parents[lca]
     while parent != lca and shell.coreness[parent] == kval:
         lca, parent = parent, shell.parents[parent]
+    return lca
 
-    return shell.vertices[get_vertices(lca)]
+
+def get_vertices(shell: ShellStruct, node: int) -> np.ndarray:
+    """all vertices in subtree of node"""
+    data, stack = [], [node]
+    while stack:
+        ele = stack.pop()
+        stack.extend(get_data(shell.children, ele))
+        data.extend(get_data(shell.nodes, ele))
+    return shell.vertices[np.array(data)]
+
+
+@click.group()
+def kcore():
+    pass
+
+
+@kcore.command()
+@click.option("--edgelist", required=True, type=click.Path(exists=True))
+@click.option("--output", required=True, type=click.Path())
+def index(edgelist, output):
+    from networkit.graphio import EdgeListReader
+    from networkit.centrality import CoreDecomposition
+
+    graph = EdgeListReader("\t", 0).read(edgelist)
+    core = CoreDecomposition(graph).run()
+
+    data = [[node, int(core.score(node))] for node in range(graph.numberOfNodes())]
+    df = pd.DataFrame(data, columns=["node", "core"])
+
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(output, index=False, header=False, sep="\t")
+
+
+@kcore.command()
+@click.option("--coreslist", required=True, type=click.Path(exists=True))
+@click.option("--edgelist", required=True, type=click.Path(exists=True))
+@click.option("--output", required=True, type=click.Path())
+def build(coreslist, edgelist, output):
+    df_values = pd.read_csv(coreslist, sep="\\s+", header=None)
+    vertices = df_values[0].values
+    cores = df_values[1].values
+    length = len(vertices)
+
+    df_edges = pd.read_csv(edgelist, sep="\\s+", header=None)
+    rows = df_edges[0].values
+    cols = df_edges[1].values
+    data = np.ones(len(rows), dtype=np.int32)
+    graph = sp.coo_array((data, (rows, cols)), shape=(length, length), dtype=np.int32)
+
+    shell = build_shell(graph, vertices, cores)
+    save_shell(shell, output)
+
+
+@kcore.command()
+@click.option("--shell_file", required=True, type=click.Path(exists=True))
+@click.option("--queries", required=True, type=click.Path(exists=True))
+@click.option("--outputdir", required=True, type=click.Path())
+def search(shell_file, queries, outputdir):
+    shell = load_shell(shell_file)
+    indexer = get_indexer(shell)
+
+    mapping: dict[int, Path] = dict()  # mapping from community IDs to files
+    output = Path(outputdir)
+    output.mkdir(parents=True, exist_ok=True)
+
+    with open(queries) as f:
+        for spec, querylist in zip(f, f):
+            spec = spec.strip().split(" ")
+            assert len(spec) == 1 or len(spec) == 2
+
+            name = spec[0]
+            kmin = 0 if len(spec) == 1 else int(spec[1])
+
+            query = np.fromstring(querylist, sep=" ", dtype=np.int32)
+            lca = find_lca(shell, query, indexer)
+            kval = shell.coreness[lca]
+
+            path = output / f"{name}_k{kval}.txt"
+            if lca in mapping:
+                if path.exists(follow_symlinks=False):
+                    path.unlink()
+                path.symlink_to(mapping[lca].name)
+            elif kval >= kmin:
+                mapping[lca] = path
+                vertices = get_vertices(shell, lca)
+                np.savetxt(path, vertices, fmt="%d")
+            else:
+                np.savetxt(path, np.array([]))
+
+
+def main():
+    import matplotlib.pyplot as plt
+
+    shell = load_shell("shell.txt.npz")
+    sizes = shell.nodes.indptr[1:] - shell.nodes.indptr[:-1]
+    print(sizes.shape)
+
+    q = np.quantile(sizes, np.linspace(0, 1, 10))
+    print(q)
+
+    fig, ax = plt.subplots()
+    ax.scatter(np.arange(len(sizes)), np.sort(sizes))
+    plt.show()
+
+
+if __name__ == "__main__":
+    # main()
+    kcore()
