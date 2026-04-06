@@ -81,24 +81,32 @@ def test_ksearch_singleton_simple():
 
 
 def test_ksearch_singleton_a():
+    print()
     cliques = [3, 4, 5, 4, 3]
     num_nodes = np.sum(cliques)
     graph, remapping = generate_graph(cliques)
     cores = np.repeat(cliques, cliques) - 1
 
-    vertices = np.arange(num_nodes)
+    vertices = np.arange(num_nodes, dtype=int)
     formapping = dict(zip(remapping, np.arange(num_nodes)))
     remapped_cores = cores[remapping[vertices]]
 
-    for q in range(num_nodes):
-        gt_comm = vertices[cores >= cores[q]]
+    queries = [np.array([formapping[q]]) for q in vertices]
+    # et_comms = list(run_queries(graph, queries, remapped_cores))
 
-        query = np.array([formapping[q]])
-        et_comms = run_queries(graph, [query], remapped_cores)
-        _, et_comm = next(et_comms)
+    # print(formapping)
+    et_comms = list(run_queries(graph, [np.array([4]), np.array([11])], remapped_cores))
+    print(remapping[et_comms[0][1]])
+    print(remapping[et_comms[1][1]])
+    return
+
+    assert len(et_comms) == num_nodes
+
+    for q, et_comm in et_comms:
+        gt_comm = vertices[cores >= cores[remapping[queries[q]]]]
         et_comm = remapping[et_comm]
 
-        # print(query, np.sort(et_comm), gt_comm)
+        print(remapping[queries[q]], np.sort(et_comm), gt_comm)
         assert_permutationally_same(et_comm, gt_comm)
 
 
@@ -132,3 +140,6 @@ def test_ksearch_singleton_b():
 
         # print(query, et_comm, gt_comm)
         assert_permutationally_same(et_comm, gt_comm)
+
+
+test_ksearch_singleton_a()

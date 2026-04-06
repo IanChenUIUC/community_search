@@ -6,6 +6,18 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 from numba import njit
+from scipy.cluster.hierarchy import DisjointSet
+
+# algorithm:
+# - each query gets a unique ID (index)
+# - label vertices as -1, or with the query that first visits it
+# - visit queries in decreasing priority, an upper bound on coreness
+# - BFS on the graph, removing already visited edges
+# - whenever encounter a node that is part of a larger community,
+#     add the entire community to the current set and continue BFS
+# - ^^^ this concerns me about the runtime, when we keep merging nodes into the other
+# - ^^^ instead, don't add the vertices and instead
+#     add the label and do a quick scan only over vertices that have incident edges
 
 
 @dataclass(slots=True)
@@ -25,6 +37,11 @@ class ShellGraph:
 
 # @njit
 def shell_bfs(graph: ShellGraph, start_node: int, cores: np.ndarray, kmin: int):
+    # TODO: I also need an "external" neighbor set representing the contracted nodes
+    # likely, should initialize labels to the identity
+    # and then update the new nodes by checking whether they are in visited or not
+    # disjoint sets may or may not be useful...
+
     num_nodes = len(graph.start_indptr)
     visited = np.zeros(num_nodes, dtype=np.bool_)
     queue = np.empty(num_nodes, dtype=np.int32)
@@ -58,29 +75,6 @@ def shell_bfs(graph: ShellGraph, start_node: int, cores: np.ndarray, kmin: int):
     return bfs_order[:order_ptr]
 
 
-def get_community(
-    communities: dict[int, np.ndarray], labels: np.ndarray, idx: int
-) -> np.ndarray:
-    """
-    Finds the community of a node given labels and past communities.
-
-    @returns
-        an array of the community for the current index.
-    """
-
-    output = []
-    seen = np.zeros_like(labels, dtype=np.bool_)
-    nodes = np.arange(len(labels))[labels == idx]  # get the nodes with idx as label
-    for node in nodes:
-        if seen[node]:
-            continue
-        comm = communities.get(node, np.array([node]))
-        seen[comm] = True
-        output.extend(comm)
-
-    return np.array(output)
-
-
 def run_queries(
     graph: sp.csr_matrix, queries: list[np.ndarray], cores: np.ndarray
 ) -> Generator[tuple[int, np.ndarray], None, None]:
@@ -104,36 +98,45 @@ def run_queries(
         end_indptr=graph.indptr[1:].copy(),
         indices=graph.indices.copy(),
     )
-    labels = np.full_like(cores, -1, dtype=np.int32)
-    visited = np.zeros_like(cores, dtype=np.bool_)
     pqueue: dict[int, list[tuple[int, np.ndarray]]] = defaultdict(list)
     for idx, query in enumerate(queries):
         pqueue[np.min(cores[query])].append((idx, query))
-    communities: dict[int, np.ndarray] = {}
+        print(f"{idx=} q={query} k={np.min(cores[query])}")
+
+    num_nodes = len(graph.indptr) - 1
+    communities = DisjointSet(np.arange(num_nodes, dtype=np.int32))
+    visited = np.zeros(num_nodes, dtype=np.bool_)
 
     # 1. iterate in decreasing priority; priority >= core(Q)
     for k in reversed(range(1, np.max(cores) + 1)):
+        ready_print = []
         while pqueue[k]:
             idx, query = pqueue[k].pop()
 
             # 2. find the reachable nodes in the subgraph
-            reach = shell_bfs(subg, query[0], cores, k)
-            reach = reach[~visited[reach]]
+            repr = query[0]
+            reach = shell_bfs(subg, repr, cores, k)
+            for i in reach:
+                communities.merge(i, repr)
 
-            # 3. update the labels to the query node
-            labels[reach] = idx
+            # 3. update the visited to the query node
             visited[reach] = True
             query = query[~visited[query]]
 
-            # 4. decrement the k if there are still nodes left
+            print(reach)
+
+            # 4. print the community if found all nodes
+            if len(query) == 0:
+                ready_print.append((idx, repr))
+
+            # 5. decrement the k if there are still nodes left
             if len(query) > 0:
                 pqueue[k - 1].append((idx, query))
                 continue
 
-            # 5. print the community if found all nodes
-            comms = get_community(communities, labels, idx)
-            communities[idx] = comms
-            yield idx, comms
+        for idx, repr in ready_print:
+            comm = communities.subset(repr)
+            yield idx, np.array(list(comm), dtype=np.int32)
 
 
 def to_graph(

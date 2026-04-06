@@ -2,7 +2,7 @@ import itertools as it
 
 import numpy as np
 import scipy.sparse as sp
-from shell import ShellStruct, build_shell, find_community, get_data
+from shell import ShellStruct, build_shell, find_lca, get_data, get_vertices
 
 
 def draw_tree(shell: ShellStruct):
@@ -105,6 +105,10 @@ def assert_permutationally_same(a, b):
     assert np.all(np.sort(a) == np.sort(b))
 
 
+def find_community(shell, query):
+    return get_vertices(shell, find_lca(shell, query))
+
+
 def main():
     cliques = [3, 6, 5, 3, 5, 6, 12, 3, 7, 8, 7, 7, 8, 6, 4, 3, 4, 4, 8]
     # print(np.cumsum(cliques))
@@ -120,13 +124,13 @@ def main():
 
     for v in vertices:
         query = np.array([v])
-        et_comm = find_community(shell, query, 0)
+        et_comm = find_community(shell, query)
         gt_comm = find_gt_comm(vertices, cliques, query)
         assert_permutationally_same(et_comm, gt_comm)
 
     for vs in it.combinations(vertices, 2):
         query = np.array(list(vs))
-        et_comm = find_community(shell, query, 0)
+        et_comm = find_community(shell, query)
         gt_comm = find_gt_comm(vertices, cliques, query)
         assert_permutationally_same(et_comm, gt_comm)
 

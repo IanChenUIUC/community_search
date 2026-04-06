@@ -1,4 +1,5 @@
 import dataclasses
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -7,6 +8,9 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 import scipy.sparse.csgraph as cs
+
+
+global start, end
 
 
 @dataclass(frozen=True)
@@ -261,6 +265,11 @@ def build_shell(
     parents[node_id] = node_id
     node_id += 1
 
+    global start, end
+    end = time.perf_counter()
+
+    print(end - start)
+
     # 6. create the final shellstruct
     shp = (node_id, num_nodes)
     nodes = sp.coo_array((np.ones_like(node_rows), (node_rows, node_cols)), shp).tocsr()
@@ -341,6 +350,9 @@ def index(edgelist, output):
 @click.option("--edgelist", required=True, type=click.Path(exists=True))
 @click.option("--output", required=True, type=click.Path())
 def build(coreslist, edgelist, output):
+    global start
+    start = time.perf_counter()
+
     df_values = pd.read_csv(coreslist, sep="\\s+", header=None)
     vertices = df_values[0].values
     cores = df_values[1].values
