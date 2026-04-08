@@ -5,19 +5,10 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
-from numba import njit
-from scipy.cluster.hierarchy import DisjointSet
 
 # algorithm:
-# - each query gets a unique ID (index)
-# - label vertices as -1, or with the query that first visits it
-# - visit queries in decreasing priority, an upper bound on coreness
-# - BFS on the graph, removing already visited edges
-# - whenever encounter a node that is part of a larger community,
-#     add the entire community to the current set and continue BFS
-# - ^^^ this concerns me about the runtime, when we keep merging nodes into the other
-# - ^^^ instead, don't add the vertices and instead
-#     add the label and do a quick scan only over vertices that have incident edges
+# 1. collect all queries with coreness k (decreasing)
+# 2. build bipartite graph, L = queries,
 
 
 @dataclass(slots=True)

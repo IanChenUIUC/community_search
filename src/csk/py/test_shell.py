@@ -135,5 +135,51 @@ def main():
         assert_permutationally_same(et_comm, gt_comm)
 
 
+# def main():
+#     def get_clique_chain(clique_sizes: list[int]) -> sp.coo_array:
+#         assert min(clique_sizes) >= 3
+
+#         edges = []
+#         offsets = np.cumsum([0] + clique_sizes[:-1])
+
+#         for i, size in enumerate(clique_sizes):
+#             start = offsets[i]
+#             # Intra-clique edges
+#             for u in range(start, start + size):
+#                 for v in range(u + 1, start + size):
+#                     edges.append([v, u])
+#                     edges.append([u, v])
+
+#             # Inter-clique bridge (last node of C_i to first node of C_i+1)
+#             if i < len(clique_sizes) - 1:
+#                 u = start + size - 1
+#                 v = offsets[i + 1]
+#                 edges.append([u, v])
+#                 edges.append([v, u])
+
+#         edges = np.array(edges).T
+#         num_nodes = np.sum(clique_sizes)
+#         rows, cols = edges[0], edges[1]
+#         data = np.ones_like(rows)
+#         return sp.coo_array((data, (rows, cols)), shape=(num_nodes, num_nodes))
+
+#     # cliques = np.array([3, 4, 3, 4, 3, 5, 5, 4, 3, 5, 4])
+#     cliques = np.array([3, 4, 3])
+#     graph = get_clique_chain(cliques.tolist())
+#     cores = np.repeat(cliques - 1, cliques)
+
+#     # Sort nodes by increasing coreness
+#     order = np.argsort(cores)
+#     rorder = np.argsort(order)
+#     cores = cores[order]
+#     graph.coords = rorder[graph.coords[0]], rorder[graph.coords[1]]
+
+#     # num_nodes = np.sum(cliques)
+#     graph = sp.triu(graph, format="csr")
+
+#     shell = build_shell(graph, order, cores)
+#     draw_tree(shell)
+
+
 if __name__ == "__main__":
     main()

@@ -9,7 +9,6 @@ import pandas as pd
 import scipy.sparse as sp
 import scipy.sparse.csgraph as cs
 
-
 global start, end
 
 
@@ -17,6 +16,8 @@ global start, end
 class ShellStruct:
     # mapping back to the user vertices
     vertices: np.ndarray
+    # coreness[i] = core number of vertex i
+    coreness: np.ndarray
 
     # assign[j] = node index of vertex j
     assign: np.ndarray
@@ -26,17 +27,10 @@ class ShellStruct:
     # find the vertex set using the indices field of csr
     nodes: sp.csr_array
 
-    # children[i] = bitmask of children of node i
-    # children[i, j] = 1 if node j is child of node i
-    # find the children set using the indices field of csr
-    children: sp.csr_array
-
     # parents[i] = parent of node i
     parents: np.ndarray
-    # coreness[i] = core number of vertex i
-    coreness: np.ndarray
 
-    # rmq[i][j] = ...
+    # O(1) access for least-common ancestor in O(N log N) space
     rmq_table: np.ndarray[tuple[int, int], np.dtype[np.int32]]
     rmq_pos: np.ndarray[tuple[int, int], np.dtype[np.int32]]
     rmq_tour: np.ndarray
@@ -86,9 +80,7 @@ class AnchoredUnionFind:
     roots: np.ndarray
 
     def __repr__(self):
-        return f"""AUF=
-{np.array([self.parents, self.sizes, self.roots])}
-"""
+        return f"""AUF=\n\t{np.array([self.parents, self.sizes, self.roots])}"""
 
     def _find(self, xs: np.ndarray):
         curr = np.array(xs, copy=True)
@@ -172,6 +164,92 @@ def build_rmq(tree: sp.csr_array) -> np.ndarray:
     _euler()
     _sparse_table()
     return rmq, pos, euler, depths
+
+
+def process_k_shell(
+    k: int,
+    start_k: int,
+    end_k: int,
+    A_upper: sp.csr_matrix,
+    uf: AnchoredUnionFind,
+    current_node_id: int,
+) -> tuple[list[TreeNode], int]:
+    """
+    Extracts the bipartite subgraph for a given k-shell, finds connected components,
+    and updates the hierarchical tree.
+    """
+    N = A_upper.shape[0]
+    Vk_nodes = np.arange(start_k, end_k)
+
+    # 2. Slice the csgraph by rows to find incident edges
+    row_start = A_upper.indptr[start_k]
+    row_end = A_upper.indptr[end_k]
+
+    # Localize indptr to the slice
+    indptr_slice = A_upper.indptr[start_k : end_k + 1] - row_start
+    indices_slice = A_upper.indices[row_start:row_end]
+
+    # Separate indices into V_k (internal) and V_{>k} (bipartite)
+    mask_same = indices_slice < end_k
+    mask_higher = ~mask_same
+
+    # Expand indptr into row indices for easy filtering
+    row_indices = np.repeat(np.arange(end_k - start_k), np.diff(indptr_slice))
+
+    # --- Step A: Internal Components (C_{ik}) ---
+    same_indices = indices_slice[mask_same] - start_k
+    same_rows = row_indices[mask_same]
+
+    # A_same is upper-triangular, but `connected_components` with directed=False handles it natively
+    A_same = sp.csr_matrix(
+        (np.ones(len(same_indices), dtype=bool), (same_rows, same_indices)),
+        shape=(end_k - start_k, end_k - start_k),
+    )
+
+    n_components, labels = cs.connected_components(A_same, directed=False)
+
+    # --- Step B: Bipartite Graph to V_{>k} ---
+    higher_indices = indices_slice[mask_higher]
+    higher_rows = row_indices[mask_higher]
+
+    # 3. Remap targets using UF representatives
+    higher_reprs = uf._find(higher_indices)
+
+    # Map from C_{ik} component labels to V_{>k} UF representatives
+    label_sources = labels[higher_rows]
+
+    # Rebuild CSR to deduplicate endpoints automatically
+    B_data = np.ones(len(label_sources), dtype=bool)
+    B = sp.csr_matrix((B_data, (label_sources, higher_reprs)), shape=(n_components, N))
+    B.sum_duplicates()
+
+    # --- Step C: Tree Building and UF Update ---
+    new_nodes = []
+    for i in range(n_components):
+        comp_nodes = Vk_nodes[labels == i]
+
+        # Unique UF representatives in V_{>k} that this component connects to
+        adj_reprs = B.indices[B.indptr[i] : B.indptr[i + 1]]
+
+        # Translate UF representatives to their actual TreeNode IDs
+        adj_roots = uf.roots[adj_reprs]
+
+        node = TreeNode(
+            id=current_node_id,
+            k=k,
+            nodes=comp_nodes.tolist(),
+            children=adj_roots.tolist(),
+        )
+        new_nodes.append(node)
+
+        # 4. Merge the new V_k component nodes WITH the components they attach to,
+        # and assign the new TreeNode ID as the root
+        xs = np.concatenate([comp_nodes, adj_reprs])
+        uf.reroot(xs, current_node_id)
+
+        current_node_id += 1
+
+    return new_nodes, current_node_id
 
 
 def build_shell(
@@ -332,8 +410,8 @@ def kcore():
 @click.option("--edgelist", required=True, type=click.Path(exists=True))
 @click.option("--output", required=True, type=click.Path())
 def index(edgelist, output):
-    from networkit.graphio import EdgeListReader
     from networkit.centrality import CoreDecomposition
+    from networkit.graphio import EdgeListReader
 
     graph = EdgeListReader("\t", 0).read(edgelist)
     core = CoreDecomposition(graph).run()

@@ -55,7 +55,6 @@ class AdvancedIndexBuilder:
         avoiding deep recursion that causes SIGSEGV on large graphs."""
         # Assign each CLTreeNode a unique integer id via BFS
         node_to_id = {}
-        queue = []
         # Collect all tree nodes reachable from v_to_treenode values
         for treenode in self.v_to_treenode.values():
             if id(treenode) not in node_to_id:
@@ -71,7 +70,7 @@ class AdvancedIndexBuilder:
                         node_to_id[id(cur)] = len(node_to_id)
                         bfs.extend(cur.children)
 
-        id_to_node = {v: k for k, v in node_to_id.items()}
+        {v: k for k, v in node_to_id.items()}
         # Build a flat list: each entry is (core_num, vertex_set, parent_id, [child_ids])
         obj_map = {}  # python id(obj) -> obj, for lookup
         for treenode in self.v_to_treenode.values():
@@ -277,7 +276,7 @@ def search(index, nodelist, outputdir):
         indexer = data
         reverse_map = None
         node_map = None
-    print(f"Indexer loaded")
+    print("Indexer loaded")
 
     def ancestors(node):
         """Return the set of all ancestors (including the node itself)."""
