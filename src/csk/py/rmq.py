@@ -16,18 +16,17 @@ def get_data(matrix: sp.csr_array | sp.csr_matrix, node: int) -> np.ndarray:
     return matrix.indices[matrix.indptr[node] : matrix.indptr[node + 1]]
 
 
-def parents_to_tree(parents: np.ndarray) -> sp.csr_matrix:
+def parents_to_tree(parents: np.ndarray) -> sp.csr_array:
     n = parents.size
     mask = parents != np.arange(len(parents))
 
     cols = np.nonzero(mask)[0]
     rows = parents[mask]
     data = np.ones_like(rows, dtype=np.bool_)
-    return sp.csr_matrix((data, (rows, cols)), shape=(n, n))
+    return sp.csr_array((data, (rows, cols)), shape=(n, n))
 
 
-# OR, just give it a set of parents
-def build_rmq(parents: np.ndarray) -> LeastCommonAncestor:
+def build_rmq(tree: sp.csr_array) -> LeastCommonAncestor:
     """
     @params
         parents represents a rooted tree
@@ -35,8 +34,7 @@ def build_rmq(parents: np.ndarray) -> LeastCommonAncestor:
         rmq: 2k x int(log_2(2k)) array, representing RMQ of the tour tour
             of the tree, where rmq[i, j] = argmin_{v}( d(v) : v in Tour[i:i+2^j] )
     """
-    tree = parents_to_tree(parents)
-    num_nodes = len(parents)
+    num_nodes = tree.shape[0]
 
     tour: np.ndarray  # the tour tour of the tree
     depths: np.ndarray  # the depths of each node in the tour tour
@@ -89,3 +87,13 @@ def build_rmq(parents: np.ndarray) -> LeastCommonAncestor:
     tour, depths, pos = _tour()
     rmq = _sparse_table(tour, depths)
     return LeastCommonAncestor(tour, depths, pos, rmq)
+
+
+def find_lca(rmq: LeastCommonAncestor, query: np.ndarray) -> int:
+    pos = rmq.pos[query]
+    left, right = np.min(pos), np.max(pos)
+
+    j = int(np.log2(right - left + 1))
+    idx = rmq.rmq[[left, right - (1 << j) + 1], j]
+    lca = rmq.tour[idx[np.argmin(rmq.depths[idx])]]
+    return lca
