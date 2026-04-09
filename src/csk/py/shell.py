@@ -55,44 +55,49 @@ def build_shell(
 
     num_vertices = len(vertices)
     assign = np.zeros(num_vertices, dtype=np.int32)
-    parents = np.full(num_vertices + 1, -1, dtype=np.int32)
-    node_id, node_rows, node_cols, node_cores = 0, [], [], []
+    parents = np.full(num_vertices, -1, dtype=np.int32)
+    node_rows, node_cols, node_idx = np.empty_like(parents), np.empty_like(parents), 0
+    node_id, node_cores = 0, []
 
     auf: AnchoredUnionFind = init_auf(num_vertices)
     counts = np.bincount(cores)
     breaks = np.zeros(len(counts) + 1, dtype=np.int32)
     breaks[1:] = np.cumsum(counts)
 
+    def append_node(vertices, children, k):
+        nonlocal node_id, node_idx
+        assign[vertices] = node_id
+        parents[auf.get_roots(children)] = node_id
+        auf.reroot(np.concatenate([vertices, children]), node_id)
+        node_rows[node_idx : node_idx + len(vertices)] = node_id
+        node_cols[node_idx : node_idx + len(vertices)] = vertices
+        node_idx += len(vertices)
+        node_cores.append(k)
+        node_id += 1
+
     def process_k_shell(k: int):
-        nonlocal node_id
+        lk_lo, lk_hi = breaks[k], breaks[k + 1] - 1  # closed interval
+        indptr = graph.indptr[lk_lo : lk_hi + 2]
+        indices = graph.indices[graph.indptr[lk_lo] : graph.indptr[lk_hi + 1]]
 
-        vk_lo, vk_hi = breaks[k], breaks[k + 1] - 1  # closed interval
-        indptr = graph.indptr[vk_lo : vk_hi + 2]
-        indices = graph.indices[graph.indptr[vk_lo] : graph.indptr[vk_hi + 1]]
-
-        left = np.arange(vk_lo, vk_hi + 1, dtype=np.int32)
-        _right = auf.find(indices[indices > vk_hi])
+        left = np.arange(lk_lo, lk_hi + 1, dtype=np.int32)
+        _right = auf.find(indices[indices > lk_hi])
         right, rinv = np.unique(_right, return_inverse=True)
         l_size, _r_size, size = len(left), len(right), len(left) + len(right)
 
-        rows = np.repeat(left - vk_lo, np.diff(indptr))
-        cols = indices - vk_lo
-        cols[indices > vk_hi] = rinv + l_size  # relabeling the edges L->R
+        rows = np.repeat(left - lk_lo, np.diff(indptr))
+        cols = indices - lk_lo
+        cols[indices > lk_hi] = rinv + l_size  # relabeling the edges L->R
         data = np.ones_like(rows, dtype=np.bool_)
         bipart = sp.csr_array((data, (rows, cols)), shape=(size, size), dtype=np.bool_)
 
-        n_cc, l_cc = cs.connected_components(bipart, directed=False)
-        for i in range(n_cc):
-            vik = np.nonzero(l_cc[:l_size] == i)[0] + vk_lo
-            rik = right[l_cc[l_size:] == i]
-
-            assign[vik] = node_id
-            parents[auf.get_roots(rik)] = node_id
-            auf.reroot(np.concatenate([vik, rik]), node_id)
-            node_rows.extend([node_id] * len(vik))
-            node_cols.extend(vik)
-            node_cores.append(k)
-            node_id += 1
+        _, l_cc = cs.connected_components(bipart, directed=False)
+        order = np.argsort(l_cc, kind="stable")
+        viks = np.split(order, np.cumsum(np.bincount(l_cc))[:-1])
+        for vik in viks:
+            lik = vik[vik < l_size] + lk_lo
+            rik = right[vik[vik >= l_size] - l_size]
+            append_node(lik, rik, k)
 
     for k in reversed(np.unique(cores)):
         process_k_shell(k)
@@ -100,11 +105,10 @@ def build_shell(
     roots = np.where(parents[:node_id] == -1)[0]
     if len(roots) > 1:
         parents[roots] = node_id
-        node_rows.extend([node_id] * len(roots))
-        node_cols.extend(roots)
         node_cores.append(0)
-        parents[node_id] = node_id
         node_id += 1
+        node_idx += len(roots)
+        parents[node_id] = node_id
     else:
         parents[roots[0]] = roots[0]
 

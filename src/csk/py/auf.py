@@ -9,12 +9,22 @@ class AnchoredUnionFind:
     sizes: np.ndarray
     roots: np.ndarray
 
-    def find(self, xs: np.ndarray):
-        curr = np.array(xs, copy=True)
-        while not np.all(self.parents[curr] == curr):
-            self.parents[curr] = self.parents[self.parents[curr]]
-            curr = self.parents[curr]
+    def find(self, xs: np.ndarray) -> np.ndarray:
+        curr = xs.copy()
+        mask = self.parents[curr] != curr
+        while np.any(mask):
+            active = curr[mask]
+            self.parents[active] = self.parents[self.parents[active]]
+            curr[mask] = self.parents[active]
+            mask[mask] = self.parents[curr[mask]] != curr[mask]
         return curr
+
+    # def find(self, xs: np.ndarray):
+    #     curr = np.array(xs, copy=True)
+    #     while not np.all(self.parents[curr] == curr):
+    #         self.parents[curr] = self.parents[self.parents[curr]]
+    #         curr = self.parents[curr]
+    #     return curr
 
     def merge(self, xs: np.ndarray) -> int:
         reprs = np.unique(self.find(xs))
