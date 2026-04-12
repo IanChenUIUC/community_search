@@ -41,8 +41,9 @@ def build(coreslist, edgelist, output):
     start = time.perf_counter()
 
     df_values = pd.read_csv(coreslist, sep="\\s+", header=None)
-    vertices = df_values[0].values
-    cores = df_values[1].values
+    vertices, cores = df_values[0].to_numpy(), df_values[1].to_numpy()
+    del df_values
+
     length = len(vertices)
     order = np.argsort(cores)
     rorder = np.argsort(order)
@@ -50,14 +51,14 @@ def build(coreslist, edgelist, output):
     cores = cores[order]
 
     df_edges = pd.read_csv(edgelist, sep="\\s+", header=None)
-    rows = df_edges[0].values
-    cols = df_edges[1].values
-    rows, cols = rorder[rows], rorder[cols]
-    rows2 = np.concatenate([rows, cols])
-    cols2 = np.concatenate([cols, rows])
-    data2 = np.ones(len(rows2), dtype=np.bool_)
-    graph = sp.csr_matrix((data2, (rows2, cols2)), shape=(length, length))
-    graph = sp.triu(graph, format="csr")
+    rows = rorder[df_edges[0].to_numpy()]
+    cols = rorder[df_edges[1].to_numpy()]
+    del df_edges
+
+    mask = rows > cols
+    rows[mask], cols[mask] = cols[mask], rows[mask]
+    data = np.ones_like(rows, dtype=np.bool_)
+    graph = sp.csr_array((data, (rows, cols)), shape=(length, length))
 
     shell = build_shell(graph, vertices, cores)
     save_shell(shell, output)

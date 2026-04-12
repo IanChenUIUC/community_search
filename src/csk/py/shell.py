@@ -35,6 +35,11 @@ class ShellStruct:
     lca: LeastCommonAncestor
 
 
+def is_triu(graph: sp.csr_array):
+    coo = graph.tocoo()
+    return np.all(coo.row <= coo.col)
+
+
 def build_shell(
     graph: sp.csr_array,
     vertices: np.ndarray,
@@ -52,6 +57,7 @@ def build_shell(
         ShellStruct
     """
     assert np.all(cores[:-1] <= cores[1:])
+    assert is_triu(graph)
 
     num_vertices = len(vertices)
     assign = np.zeros(num_vertices, dtype=np.int32)
@@ -76,27 +82,24 @@ def build_shell(
         node_id += 1
 
     def process_k_shell(k: int):
-        lk_lo, lk_hi = breaks[k], breaks[k + 1] - 1  # closed interval
-        indptr = graph.indptr[lk_lo : lk_hi + 2]
-        indices = graph.indices[graph.indptr[lk_lo] : graph.indptr[lk_hi + 1]]
+        # the closed interval representing the left endpoints
+        lk_lo, lk_hi, l_size = breaks[k], breaks[k + 1] - 1, breaks[k + 1] - breaks[k]
+        sub_coo = graph[lk_lo : lk_hi + 1].tocoo()
+        rows, cols = sub_coo.row, sub_coo.col.copy()
 
-        left = np.arange(lk_lo, lk_hi + 1, dtype=np.int32)
-        _right = auf.find(indices[indices > lk_hi])
-        right, rinv = np.unique(_right, return_inverse=True)
-        l_size, _r_size, size = len(left), len(right), len(left) + len(right)
+        mask = cols > lk_hi  # the right endpoints that we need to remap
+        rk, rinv = np.unique(auf.find(sub_coo.col[mask]), return_inverse=True)
+        cols[mask] = rinv + l_size
+        cols[~mask] -= lk_lo
+        size = len(rk) + l_size
 
-        rows = np.repeat(left - lk_lo, np.diff(indptr))
-        cols = indices - lk_lo
-        cols[indices > lk_hi] = rinv + l_size  # relabeling the edges L->R
-        data = np.ones_like(rows, dtype=np.bool_)
-        bipart = sp.csr_array((data, (rows, cols)), shape=(size, size), dtype=np.bool_)
-
-        _, l_cc = cs.connected_components(bipart, directed=False)
+        subg = sp.csr_array((sub_coo.data, (rows, cols)), shape=(size, size))
+        _, l_cc = cs.connected_components(subg, directed=False)
         order = np.argsort(l_cc, kind="stable")
         viks = np.split(order, np.cumsum(np.bincount(l_cc))[:-1])
         for vik in viks:
             lik = vik[vik < l_size] + lk_lo
-            rik = right[vik[vik >= l_size] - l_size]
+            rik = rk[vik[vik >= l_size] - l_size]
             append_node(lik, rik, k)
 
     for k in reversed(np.unique(cores)):
@@ -106,9 +109,9 @@ def build_shell(
     if len(roots) > 1:
         parents[roots] = node_id
         node_cores.append(0)
+        parents[node_id] = node_id
         node_id += 1
         node_idx += len(roots)
-        parents[node_id] = node_id
     else:
         parents[roots[0]] = roots[0]
 
