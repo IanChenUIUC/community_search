@@ -1,23 +1,17 @@
-import time
 from pathlib import Path
 
 import click
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
-from rmq import find_lca
-from shell import build_shell, get_vertices, load_shell, save_shell
+
+from ..csk.shell import ShellStruct
 
 
-@click.group()
-def kcore():
-    pass
-
-
-@kcore.command()
+@click.command()
 @click.option("--edgelist", required=True, type=click.Path(exists=True))
 @click.option("--output", required=True, type=click.Path())
-def index(edgelist, output):
+def shell_compressed_index(edgelist, output):
     from networkit.centrality import CoreDecomposition
     from networkit.graphio import EdgeListReader
 
@@ -32,14 +26,11 @@ def index(edgelist, output):
     df.to_csv(output, index=False, header=False, sep="\t")
 
 
-@kcore.command()
+@click.command()
 @click.option("--coreslist", required=True, type=click.Path(exists=True))
 @click.option("--edgelist", required=True, type=click.Path(exists=True))
 @click.option("--output", required=True, type=click.Path())
-def build(coreslist, edgelist, output):
-    global start
-    start = time.perf_counter()
-
+def shell_compressed_build(coreslist, edgelist, output):
     df_values = pd.read_csv(coreslist, sep="\\s+", header=None)
     vertices, cores = df_values[0].to_numpy(), df_values[1].to_numpy()
     del df_values
@@ -60,19 +51,19 @@ def build(coreslist, edgelist, output):
     data = np.ones_like(rows, dtype=np.bool_)
     graph = sp.csr_array((data, (rows, cols)), shape=(length, length))
 
-    shell = build_shell(graph, vertices, cores)
-    save_shell(shell, output)
+    shell = ShellStruct.build(graph, vertices, cores)
+    shell.save(output)
 
 
-@kcore.command()
+@click.command()
 @click.option("--shell_file", required=True, type=click.Path(exists=True))
 @click.option("--queries", required=True, type=click.Path(exists=True))
 @click.option("--outputdir", required=True, type=click.Path())
-def search(shell_file, queries, outputdir):
-    shell = load_shell(shell_file)
+def shell_compressed_search(shell_file, queries, outputdir):
+    shell = ShellStruct.load(shell_file)
     indexer = pd.Index(shell.vertices)
 
-    mapping: dict[int, Path] = dict()  # mapping from community IDs to files
+    mapping: dict[np.int32, Path] = dict()  # mapping from community IDs to files
     output = Path(outputdir)
     output.mkdir(parents=True, exist_ok=True)
 
@@ -86,7 +77,7 @@ def search(shell_file, queries, outputdir):
 
             query = np.fromstring(querylist, sep=" ", dtype=np.int32)
             nodes = shell.assign[indexer.get_indexer(query)]
-            lca = find_lca(shell.lca, nodes)
+            lca = shell.lca.find_lca(nodes)
             kval = shell.coreness[lca]
 
             path = output / f"{name}_k{kval}.txt"
@@ -96,11 +87,7 @@ def search(shell_file, queries, outputdir):
                 path.symlink_to(mapping[lca].name)
             elif kval >= kmin:
                 mapping[lca] = path
-                vertices = get_vertices(shell, lca)
+                vertices = shell.get_vertices(lca)
                 np.savetxt(path, vertices, fmt="%d")
             else:
                 np.savetxt(path, np.array([]))
-
-
-if __name__ == "__main__":
-    kcore()

@@ -1,14 +1,12 @@
 from collections import defaultdict
 from collections.abc import Generator
-from pprint import pprint
 
 # import numba as nb
 import numpy as np
 import scipy.sparse as sp
-from maxheap import MaxHeap
-
-# from numba.typed import Dict, List
 from scipy.cluster.hierarchy import DisjointSet
+
+from ..algs.maxheap import MaxHeap
 
 
 def get_row(graph: sp.csr_array, row: np.ndarray):

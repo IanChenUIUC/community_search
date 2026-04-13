@@ -48,7 +48,7 @@ def search(edgelist, index, nodelist, outputdir):
         if cores[q] < k:
             return np.empty(0, dtype=np.int64)
 
-        mask = cores >= k
+        mask = cores >= cores[q]
         visited = np.zeros(n, dtype=np.uint8)
         stack, sidx = np.empty(n, dtype=np.int64), 0
         out, oidx = np.empty(n, dtype=np.int64), 0

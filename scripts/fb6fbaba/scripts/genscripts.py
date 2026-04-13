@@ -76,10 +76,10 @@ networks = [
 
 
 def main():
-    with open("array7.txt") as f:
+    with open("array2.txt") as f:
         line = f.read()
 
-    with open("array7.txt", "w") as f:
+    with open("array2.txt", "w") as f:
         for file in networks:
             repl = line.replace("academia_edu", file)
             f.write(repl)

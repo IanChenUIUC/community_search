@@ -1,8 +1,3 @@
-import pickle
-import time
-from pathlib import Path
-
-import click
 import networkit as nk
 
 """
@@ -136,10 +131,8 @@ class AdvancedIndexBuilder:
         # bottom-up: decrement k in each iteration
         for k in range(k_max, -1, -1):
             # (new) nodes encountered for this k
-            k_shell_nodes = k_shells.getMembers(
-                k
-            )  # set of nodes with core number exactly being k
-            # print(f"{k}-shell: {k_shell_nodes}")
+            # set of nodes with core number exactly being k
+            k_shell_nodes = k_shells.getMembers(k)
 
             if not k_shell_nodes:
                 continue  # no nodes for this layer
@@ -149,9 +142,8 @@ class AdvancedIndexBuilder:
             for v in k_shell_nodes:
                 k_prime_nodes.add(uf.find(v))
 
-            k_union_nodes = (
-                k_shell_nodes | k_prime_nodes
-            )  # nodes used to compute k-core
+            # nodes used to compute k-core
+            k_union_nodes = k_shell_nodes | k_prime_nodes
             k_union_subgraph = nk.graphtools.subgraphFromNodes(
                 self.graph, k_union_nodes
             )
@@ -161,7 +153,6 @@ class AdvancedIndexBuilder:
                 .getComponents()
             )
 
-            # print(f"{k}_union_cc: {k_union_cc}")
             for cc_nodes in k_union_cc:
                 cc_nodes = set(cc_nodes)
                 cc_union_nodes = cc_nodes & k_shell_nodes
@@ -169,9 +160,8 @@ class AdvancedIndexBuilder:
                 if len(cc_union_nodes) == 0:
                     continue  # empty connected components
 
-                k_cc_treenode = CLTreeNode(
-                    k, cc_union_nodes
-                )  # CL-tree node for this k-shell component
+                # CL-tree node for this k-shell component
+                k_cc_treenode = CLTreeNode(k, cc_union_nodes)
                 top_level_treenodes.add(k_cc_treenode)
                 count += 1
 
@@ -198,10 +188,6 @@ class AdvancedIndexBuilder:
                             top_level_treenodes.remove(prev_treenode)
                             processed_treenodes.add(prev_treenode)
 
-                            # print(
-                            #     f"Adding {prev_treenode} ({prev_treenode.vertex_set}) as a child to {k_cc_treenode} ({k_cc_treenode.vertex_set})"
-                            # )
-
                         # update union-find structure
                         if core.score(u) >= core.score(v):
                             uf.union(u, v)
@@ -211,74 +197,66 @@ class AdvancedIndexBuilder:
                     if core.score(self.anchor_map[v_root]) > core.score(v):
                         self.anchor_map[v_root] = v
 
-        # TODO: build root node
         root = CLTreeNode(-1, [])
         for treenode in top_level_treenodes:
             root.add_child(treenode)
 
-        # q = [root]
-        # while len(q) != 0:
-        #     node = q.pop(0)
-        #     print(
-        #         f"TreeNode: {node} (core={node.core_num}), with vertices: {node.vertex_set}"
-        #     )
-        #     q.extend(node.children)
-
         return None
 
+    def get_root(self):
+        node = self.v_to_treenode[0]
+        while node.parent is not None:
+            node = node.parent
+        return node
 
-@click.group()
-def kcore():
-    pass
+    def draw(self, root=None):
+        """
+        Print an ASCII representation of the subtree rooted at `root`.
+        Handles cycles by tracking visited nodes.
+        """
 
+        if root is None:
+            root = self.get_root()
 
-@kcore.command()
-@click.option("--edgelist", required=True, type=click.Path(exists=True))
-@click.option("--output", required=True, type=click.Path())
-def index(edgelist, output):
-    reader = nk.graphio.EdgeListReader("\t", 0, continuous=False)
-    graph = reader.read(edgelist)
-    # getNodeMap: original_id (str) -> internal_id (int)
-    node_map = reader.getNodeMap()
-    # Build reverse map: internal_id -> original_id (as int)
-    reverse_map = {v: int(k) for k, v in node_map.items()}
-    print(f"Graph loaded: {graph.numberOfNodes()} nodes, {graph.numberOfEdges()} edges")
+        def _node_label(node):
+            verts = ",".join(str(v) for v in sorted(node.vertex_set))
+            return f"CLTreeNode(core={node.core_num}, vertices={{ {verts} }})"
 
-    # obtain index
-    start = time.perf_counter()
-    indexer = AdvancedIndexBuilder(graph)
-    indexer.build()
-    end = time.perf_counter()
-    print(end - start)
+        def _sorted_children(node):
+            # deterministic ordering: higher core first, then smallest vertex id
+            def key(c):
+                minv = min(c.vertex_set) if c.vertex_set else float("inf")
+                return (-c.core_num, minv)
 
-    Path(output).parent.mkdir(parents=True, exist_ok=True)
-    with open(output, "wb") as f:
-        pickle.dump(
-            {"indexer": indexer, "reverse_map": reverse_map, "node_map": node_map},
-            f,
-            protocol=pickle.HIGHEST_PROTOCOL,
-        )
+            return sorted(node.children, key=key)
 
+        visited = set()
 
-@kcore.command()
-@click.option("--index", required=True, type=click.Path(exists=True))
-@click.option("--nodelist", required=True, type=click.Path(exists=True))
-@click.option("--outputdir", required=True, type=click.Path())
-def search(index, nodelist, outputdir):
-    with open(index, "rb") as f:
-        data = pickle.load(f)
-    # Support both old format (bare indexer) and new format (dict with maps)
-    if isinstance(data, dict):
-        indexer = data["indexer"]
-        reverse_map = data.get("reverse_map")  # internal_id -> original_id
-        node_map = data.get("node_map")  # original_id (str) -> internal_id
-    else:
-        indexer = data
-        reverse_map = None
-        node_map = None
-    print("Indexer loaded")
+        def _draw(node, prefix="", is_last=True):
+            nid = id(node)
+            connector = "└─ " if is_last else "├─ "
+            line = prefix + connector + _node_label(node)
+            print(line)
+            if nid in visited:
+                # indicate already-printed node to avoid infinite loops
+                print(prefix + ("    " if is_last else "│   ") + "[already shown]")
+                return
+            visited.add(nid)
 
-    def ancestors(node):
+            children = _sorted_children(node)
+            for i, child in enumerate(children):
+                last = i == len(children) - 1
+                new_prefix = prefix + ("    " if is_last else "│   ")
+                _draw(child, new_prefix, last)
+
+        # root printed without leading connector
+        print(_node_label(root))
+        visited.add(id(root))
+        children = _sorted_children(root)
+        for i, child in enumerate(children):
+            _draw(child, "", i == len(children) - 1)
+
+    def ancestors(self, node):
         """Return the set of all ancestors (including the node itself)."""
         result = set()
         while node is not None:
@@ -287,14 +265,14 @@ def search(index, nodelist, outputdir):
         # print(f"Ancestor found for node {node}")
         return result
 
-    def find_kcore(queries, k):
+    def find_kcore(self, queries, k):
         """Returns (resolved_k, sorted_vertices). resolved_k is the actual
         core number used (matters when k=-1)."""
         nodes = []
         for q in queries:
-            if q not in indexer.v_to_treenode:
+            if q not in self.v_to_treenode:
                 return k, []
-            node = indexer.v_to_treenode[q]
+            node = self.v_to_treenode[q]
             if k == -1:
                 # just stay at the node - this is the highest k possible
                 pass
@@ -307,9 +285,9 @@ def search(index, nodelist, outputdir):
             nodes.append(node)
 
         # intersecting ancestor sets to find LCA
-        lca_candidates = ancestors(nodes[0])
+        lca_candidates = self.ancestors(nodes[0])
         for node in nodes[1:]:
-            lca_candidates &= ancestors(node)
+            lca_candidates &= self.ancestors(node)
 
         if not lca_candidates:
             return k, []
@@ -328,51 +306,3 @@ def search(index, nodelist, outputdir):
             vertices.update(cur.vertex_set)
             stack.extend(cur.children)
         return lca.core_num, sorted(vertices)
-
-    count = 0
-    with open(nodelist) as nodefile:
-        for line in nodefile.readlines():
-            parts = line.strip().split(" ")
-            queries_str = parts[0]
-            k = int(parts[1]) if len(parts) > 1 else -1
-            original_queries = [int(q) for q in queries_str.split(",")]
-            # Map original IDs to internal IDs if node_map exists
-            if node_map is not None:
-                queries = []
-                for q in original_queries:
-                    if str(q) in node_map:
-                        queries.append(node_map[str(q)])
-                    else:
-                        print(f"Warning: query node {q} not found in graph")
-                        queries.append(-1)  # will be caught by find_kcore
-            else:
-                queries = original_queries
-
-            resolved_k, component = find_kcore(queries, k)
-            # Map internal IDs back to original IDs in output
-            if reverse_map is not None:
-                component = [reverse_map.get(v, v) for v in component]
-            # Use query string as dir name, but fall back to a descriptive
-            # name derived from the nodelist filename when it's too long for
-            # the filesystem (max 255 bytes).
-            dirname = queries_str
-            if len(dirname.encode("utf-8")) > 255:
-                dirname = Path(nodelist).stem + f"_line{count}"
-            outpath = Path(outputdir) / f"{dirname}/kcore_k{resolved_k}.txt"
-            outpath.parent.mkdir(parents=True, exist_ok=True)
-
-            with outpath.open("w") as outfile:
-                outfile.write("\n".join(map(str, component)))
-                if len(component):
-                    outfile.write("\n")
-                # outfile.write("-1")
-
-            count += 1
-            if count % 50 == 0:
-                print(f"Finished {count} queries...")
-
-    print("Search jobs completed.")
-
-
-if __name__ == "__main__":
-    kcore()

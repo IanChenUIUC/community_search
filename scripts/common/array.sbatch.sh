@@ -22,5 +22,5 @@ if [ -z "$1" ]; then
 fi
  
 apptainer exec -B /projects:/projects $MYCONTAINER \
-  python3 ./scripts/array.py $1
+  python3 ./scripts/common/array.py $1
 

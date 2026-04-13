@@ -1,6 +1,6 @@
-import itertools as it
 from pathlib import Path
 
+import click
 import networkx as nx
 
 
@@ -104,15 +104,17 @@ def get_comm(g: nx.Graph, q: int, query_k: int) -> set[int]:
 
     update = True
     while update and uppers[q] >= query_k:
-        print(f"{lowers[q]=}, {uppers[q]=} {subg.number_of_nodes()=}")
+        # print(f"{lowers[q]=}, {uppers[q]=} {subg.number_of_nodes()=}")
 
         update_lower = update_lowers(subg, lowers, finished)
         update_upper = update_uppers(subg, uppers, finished)
+        if update_upper:
+            update_uppers(subg, uppers, finished)
 
         subg, update_subg = update_subgraph(g, subg, lowers, uppers)
         update = update_lower | update_upper | update_subg
 
-        all_visited = all_visited.union(set(subg.nodes))
+        all_visited.update(subg.nodes)
 
     # lowers = {v: 0 for v in g.nodes}
     # update_lowers(g, lowers)
@@ -123,25 +125,28 @@ def get_comm(g: nx.Graph, q: int, query_k: int) -> set[int]:
     # for v in g.nodes:
     #     assert lowers[v] == uppers[v]
 
-    print(f"{lowers[q]=}, {uppers[q]=}")
-    print(len(all_visited), len(subg.nodes))
-    return set(subg.nodes)
+    # print(f"{lowers[q]=}, {uppers[q]=}")
+    comm = set(subg.nodes) if uppers[q] >= query_k else set()
+    print(f"{q},{len(comm)},{len(all_visited)}")
+    return comm
 
 
-def main():
-    g: nx.Graph = nx.read_edgelist("test/network.tsv", nodetype=int)
-    with open("test/nodes.txt") as f:
+@click.command()
+@click.option("--edgelist", required=True, type=click.Path(exists=True))
+@click.option("--nodelist", required=True, type=click.Path(exists=True))
+@click.option("--outputdir", required=True, type=click.Path())
+def main(edgelist, nodelist, outputdir):
+    g: nx.Graph = nx.read_edgelist(edgelist, nodetype=int)
+    with open(nodelist) as f:
         lines = [map(int, line.strip().split()) for line in f.readlines()]
 
     for q, k in lines:
         print(f"Getting comm for {q=} {k=}")
         cmty = get_comm(g, q, k)
-        path = Path(f"test/{q}/kcore_{k}.txt")
+        path = Path(outputdir) / str(q) / f"kcore_k{k}.txt"
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w") as f:
             f.write("\n".join(map(str, cmty)))
-
-        break
 
 
 if __name__ == "__main__":
