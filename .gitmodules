@@ -1,0 +1,6 @@
+[submodule "src/ucrparlay"]
+	path = src/ucrparlay
+	url = https://github.com/ucrparlay/Parallel-KCore
+[submodule "src/gbbs"]
+	path = src/gbbs
+	url = https://github.com/ParAlg/gbbs
