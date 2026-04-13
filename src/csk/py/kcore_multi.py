@@ -1,169 +1,131 @@
 from collections import defaultdict
 from collections.abc import Generator
-from dataclasses import dataclass
+from pprint import pprint
 
+# import numba as nb
 import numpy as np
-import pandas as pd
 import scipy.sparse as sp
+from maxheap import MaxHeap
 
-# algorithm:
-# 1. collect all queries with coreness k (decreasing)
-# 2. build bipartite graph, L = queries,
+# from numba.typed import Dict, List
+from scipy.cluster.hierarchy import DisjointSet
 
 
-@dataclass(slots=True)
-class ShellGraph:
+def get_row(graph: sp.csr_array, row: np.ndarray):
+    return graph.indices[graph.indptr[row] : graph.indptr[row + 1]]
+
+
+def search(
+    graph: sp.csr_array, coreness: np.ndarray, queries: list[np.ndarray]
+) -> Generator[tuple[int, int, set[int]], None, None]:
     """
-    indices: as in csr_matrix.indices for an adjacency matrix
-    start_indptr and end_indptr: subslices of each row to study
-    start_node:
-    """
-
-    # num_nodes == len(start_indptr) == len(end_indptr)
-    # num_edges == len(indices)
-    start_indptr: np.ndarray
-    end_indptr: np.ndarray
-    indices: np.ndarray
-
-
-# @njit
-def shell_bfs(graph: ShellGraph, start_node: int, cores: np.ndarray, kmin: int):
-    # TODO: I also need an "external" neighbor set representing the contracted nodes
-    # likely, should initialize labels to the identity
-    # and then update the new nodes by checking whether they are in visited or not
-    # disjoint sets may or may not be useful...
-
-    num_nodes = len(graph.start_indptr)
-    visited = np.zeros(num_nodes, dtype=np.bool_)
-    queue = np.empty(num_nodes, dtype=np.int32)
-    bfs_order = np.empty(num_nodes, dtype=np.int32)
-
-    queue[0] = start_node
-    visited[start_node] = True
-
-    read_ptr = 0
-    write_ptr = 1
-    order_ptr = 0
-
-    while read_ptr < write_ptr:
-        curr_node = queue[read_ptr]
-        read_ptr += 1
-
-        bfs_order[order_ptr] = curr_node
-        order_ptr += 1
-
-        beg, end = graph.start_indptr[curr_node], graph.end_indptr[curr_node]
-        end = beg + np.searchsorted(-cores[graph.indices[beg:end]], -kmin, side="right")
-        graph.start_indptr[curr_node] = end  # remove these edges from the graph
-
-        neighbors = graph.indices[beg:end]
-        neighbors = neighbors[~visited[neighbors]]
-
-        visited[neighbors] = True
-        queue[write_ptr : write_ptr + len(neighbors)] = neighbors
-        write_ptr += len(neighbors)
-
-    return bfs_order[:order_ptr]
-
-
-def run_queries(
-    graph: sp.csr_matrix, queries: list[np.ndarray], cores: np.ndarray
-) -> Generator[tuple[int, np.ndarray], None, None]:
-    """
-    Runs an work-efficient algorithm for solving multiple queries.
-    Yields each community incrementally, which reduces memory allocations.
-
-    Assumes that all vertices are in the range 0 to n-1, sorted by decreasing coreness.
-    Assumes that vertices and adjacency are sorted according to decreasing coreness.
-
-    @returns
-        the index of the query and its community (may not return queries in order)
+    @yields
+        the index of the query, a unique community ID, and the set of vertices
+        if the communityID is repeated, then the vertex set may be empty
     """
 
-    assert graph.has_sorted_indices  # adjacency is sorted order
-    assert np.all(cores[:-1] >= cores[1:])  # the vertices are sorted correctly
+    heap: MaxHeap = MaxHeap()
+    ready: MaxHeap = MaxHeap()
+    visited: set[int] = set()
+    terminals = defaultdict(lambda: defaultdict(int))
+    uf = DisjointSet(np.arange(len(coreness), dtype=np.int32))
+    commID = 0
 
-    # 0. initialize data structures for later use
-    subg: ShellGraph = ShellGraph(
-        start_indptr=graph.indptr[:-1].copy(),
-        end_indptr=graph.indptr[1:].copy(),
-        indices=graph.indices.copy(),
-    )
-    pqueue: dict[int, list[tuple[int, np.ndarray]]] = defaultdict(list)
-    for idx, query in enumerate(queries):
-        pqueue[np.min(cores[query])].append((idx, query))
-        print(f"{idx=} q={query} k={np.min(cores[query])}")
-
-    num_nodes = len(graph.indptr) - 1
-    communities = DisjointSet(np.arange(num_nodes, dtype=np.int32))
-    visited = np.zeros(num_nodes, dtype=np.bool_)
-
-    # 1. iterate in decreasing priority; priority >= core(Q)
-    for k in reversed(range(1, np.max(cores) + 1)):
-        ready_print = []
-        while pqueue[k]:
-            idx, query = pqueue[k].pop()
-
-            # 2. find the reachable nodes in the subgraph
-            repr = query[0]
-            reach = shell_bfs(subg, repr, cores, k)
-            for i in reach:
-                communities.merge(i, repr)
-
-            # 3. update the visited to the query node
-            visited[reach] = True
-            query = query[~visited[query]]
-
-            print(reach)
-
-            # 4. print the community if found all nodes
-            if len(query) == 0:
-                ready_print.append((idx, repr))
-
-            # 5. decrement the k if there are still nodes left
-            if len(query) > 0:
-                pqueue[k - 1].append((idx, query))
+    def add_nbrs(vertex):
+        for nbr in get_row(graph, vertex):
+            if nbr in visited:
                 continue
+            eval = min(coreness[vertex], coreness[nbr])
+            heap.push(eval, (vertex, nbr))
 
-        for idx, repr in ready_print:
-            comm = communities.subset(repr)
-            yield idx, np.array(list(comm), dtype=np.int32)
+    for qID, query in enumerate(queries):
+        for v in query:
+            terminals[v][qID] += 1
+            if terminals[v][qID] == len(query):
+                ready.push(coreness[v], (qID, qID))
+                del terminals[v][qID]
+            if v not in visited:
+                visited.add(v)
+                add_nbrs(v)
+
+    while not heap.is_empty():
+        k, _ = heap.peek()
+
+        while not heap.is_empty() and heap.peek()[0] == k:
+            _, (u, v) = heap.pop()
+
+            if v not in visited:
+                uf.merge(u, v)
+                visited.add(v)
+                add_nbrs(v)
+
+            elif uf[u] != uf[v]:
+                # merge smaller into larger
+                if len(terminals[uf[u]]) < len(terminals[uf[v]]):
+                    u, v = v, u
+
+                root = uf[u]
+                for qID, count in terminals[uf[v]].items():
+                    terminals[uf[u]][qID] += count
+                    if terminals[uf[u]][qID] == len(queries[qID]):
+                        ready.push(k, (qID, qID))
+                        del terminals[uf[u]][qID]
+                del terminals[uf[v]]
+                uf.merge(u, v)
+
+                if uf[u] != root:
+                    terminals[uf[u]] = terminals[root]
+                    del terminals[root]
+
+        curr = dict()
+        while not ready.is_empty() and ready.peek()[0] >= k:
+            k, (qID, _) = ready.pop()
+            repr = queries[qID][0]
+            if uf[repr] in curr:
+                yield qID, curr[uf[repr]], set()
+            else:
+                yield qID, commID, uf.subset(repr)
+                curr[uf[repr]] = commID
+            commID += 1
+
+        # early return for yielded all comms
+        if commID == len(queries):
+            return
 
 
-def to_graph(
-    edges: np.ndarray, cores: dict[int, int]
-) -> tuple[sp.csr_matrix, np.ndarray]:
-    """
-    @params
-        edges: a 2xN matrix of edges; only one direction of edge should be specified
-        cores: the core numbers of each vertex (not necessarily contiguous)
-    @returns
-        the first element of output is a graph that can be fed into get_community
-        the second element is the remapping of nodes from newIDs to origIDs
-    """
+def get_clique_chain(clique_sizes: list[int]):
+    assert min(clique_sizes) >= 3
 
-    codes, uniques = pd.factorize(edges.ravel())
+    n = sum(clique_sizes)
+    edges = []
+    offsets = np.cumsum([0] + clique_sizes[:-1])
 
-    v_cores = np.array([cores[u] for u in uniques])
-    rank_map = np.argsort(np.argsort(-v_cores))
-    new_edges = rank_map[codes].reshape(edges.shape)
-    original_ids = np.empty_like(uniques)
-    original_ids[rank_map] = uniques
+    for i, size in enumerate(clique_sizes):
+        start = offsets[i]
+        for u in range(start, start + size):
+            for v in range(u + 1, start + size):
+                edges.append([v, u])
+                edges.append([u, v])
 
-    u, v = new_edges[0], new_edges[1]
-    rows = np.concatenate([u, v])
-    cols = np.concatenate([v, u])
+        if i < len(clique_sizes) - 1:
+            u = start + size - 1
+            v = offsets[i + 1]
+            edges.append([u, v])
+            edges.append([v, u])
 
-    num_nodes = len(uniques)
-    data = np.ones(len(rows), dtype=np.int32)
-    graph = sp.csr_matrix((data, (rows, cols)), shape=(num_nodes, num_nodes))
-    graph.sort_indices()
-
-    return graph, original_ids
+    edges = np.array(edges).T
+    rows, cols, data = edges[0], edges[1], np.ones_like(edges[0], dtype=np.bool_)
+    return sp.csr_array((data, (rows, cols)), shape=(n, n))
 
 
 def main():
-    pass
+    cliques = np.array([3, 4, 3])
+    coreness = np.repeat(cliques - 1, cliques)
+    graph = get_clique_chain(cliques.tolist())
+
+    queries = [np.array([0]), np.array([2]), np.array([4]), np.array([6])]
+    for queryID, commID, comm in search(graph, coreness, queries):
+        print(f"{queryID=} {commID=} {comm=}")
 
 
 if __name__ == "__main__":
