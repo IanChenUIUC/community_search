@@ -6,8 +6,6 @@ import numpy as np
 import numpy.typing as npt
 import scipy.sparse as sp
 
-from .common import get_data
-
 
 @dataclass(frozen=True)
 class LeastCommonAncestor:
@@ -28,16 +26,15 @@ class LeastCommonAncestor:
         @returns: LCA implementation.
         """
 
-        num_nodes = tree.size
+        num_nodes = np.int32(tree.count_nonzero()) + 1
         tour_len = 2 * num_nodes - 1
 
-        tour = np.empty(tour_len, dtype=np.int32)
-        depths = np.empty_like(tour)
-        pos = np.empty(tree.size, dtype=np.int32)
-        rmqT = np.empty((int(np.log2(tour_len)) + 1, tour_len), dtype=np.int32)
-
         @numba.njit
-        def _tour():
+        def _tour(indices: np.ndarray, indptr: np.ndarray):
+            pos = np.empty(num_nodes, dtype=np.int32)
+            tour = np.empty(tour_len, dtype=np.int32)
+            depths = np.empty_like(tour)
+
             # node, depth, c = counting how many times we visited r
             root = num_nodes - 1
             stack = [(root, 0, 0)]
@@ -49,14 +46,17 @@ class LeastCommonAncestor:
                 tour[idx], depths[idx] = u, d
                 depths[idx] = d
 
-                adj = get_data(tree, u)
+                adj = indices[indptr[u] : indptr[u + 1]]
                 if c < len(adj):
                     stack.append((u, d, c + 1))
                     stack.append((adj[c], d + 1, 0))
 
+            return tour, depths, pos
+
         @numba.njit
-        def _sparse_table():
-            n, m = rmqT.shape
+        def _sparse_table(depths: np.ndarray):
+            n, m = int(np.log2(tour_len)) + 1, tour_len
+            rmqT = np.zeros((n, m), dtype=np.int32)
 
             rmqT[0] = np.arange(m, dtype=np.int32)  # base case: length 1
             for j in range(1, n):
@@ -65,9 +65,11 @@ class LeastCommonAncestor:
                 idx2 = rmqT[j - 1, shift:m]
                 rmqT[j, : m - shift] = np.where(depths[idx1] < depths[idx2], idx1, idx2)
 
-        _tour()
-        _sparse_table()
-        return cls(tour, depths, pos, rmqT.T)
+            return rmqT.T
+
+        tour, depths, pos = _tour(tree.indices, tree.indptr)
+        rmq = _sparse_table(depths)
+        return cls(tour, depths, pos, rmq)
 
     def find_lca(self, query: np.ndarray) -> np.int32:
         pos = self.pos[query]

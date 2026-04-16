@@ -1,90 +1,92 @@
 import itertools as it
 
 import numpy as np
-import scipy.sparse as sp
-from rmq import parents_to_tree
-from shell import ShellStruct, build_shell, get_data, get_vertices
-
-# def assert_permutationally_same(a, b):
-#     assert a.shape == b.shape
-#     assert np.all(np.sort(a) == np.sort(b))
-
-
-# def find_community(shell, query):
-#     return get_vertices(shell, find_lca(shell, query))
+from common import (
+    assert_permutationally_same,
+    find_gt_comm,
+    get_clique_chain,
+    to_triu_adj,
+)
+from csk.algs.shell import ShellStruct, search
 
 
-# def main():
-#     cliques = [3, 6, 5, 3, 5, 6, 12, 3, 7, 8, 7, 7, 8, 6, 4, 3, 4, 4, 8]
-#     # print(np.cumsum(cliques))
-#     # print(cliques)
+def test_shell_singleton_a():
+    cliques = np.array([3, 4, 5, 4, 3])
+    num_nodes = np.sum(cliques)
+    cores = np.repeat(cliques, cliques) - 1
+    edges = get_clique_chain(cliques.tolist())
 
-#     num_nodes = np.sum(cliques)
-#     edges = get_clique_chain(cliques)
-#     vertices = np.arange(num_nodes)
-#     cores = np.repeat(cliques, cliques) - 1
+    graph, new_to_old, old_to_new = to_triu_adj(edges, cores)
+    new_vs = np.arange(num_nodes, dtype=np.int32)
+    new_ks = cores[new_to_old]
+    shell = ShellStruct.build(graph, new_to_old, new_ks)
+    shell.draw_tree()
 
-#     shell = build_shell(edges, vertices, cores)
-#     draw_tree(shell)
+    queries = [np.array([old_to_new[q]]) for q in new_vs]
+    et_comms = list(search(shell, queries))
+    assert len(et_comms) == len(queries)
 
-#     for v in vertices:
-#         query = np.array([v])
-#         et_comm = find_community(shell, query)
-#         gt_comm = find_gt_comm(vertices, cliques, query)
-#         assert_permutationally_same(et_comm, gt_comm)
-
-#     for vs in it.combinations(vertices, 2):
-#         query = np.array(list(vs))
-#         et_comm = find_community(shell, query)
-#         gt_comm = find_gt_comm(vertices, cliques, query)
-#         assert_permutationally_same(et_comm, gt_comm)
-
-
-def main():
-    def get_clique_chain(clique_sizes: list[int]) -> sp.coo_array:
-        assert min(clique_sizes) >= 3
-
-        edges = []
-        offsets = np.cumsum([0] + clique_sizes[:-1])
-
-        for i, size in enumerate(clique_sizes):
-            start = offsets[i]
-            # Intra-clique edges
-            for u in range(start, start + size):
-                for v in range(u + 1, start + size):
-                    edges.append([v, u])
-                    edges.append([u, v])
-
-            # Inter-clique bridge (last node of C_i to first node of C_i+1)
-            if i < len(clique_sizes) - 1:
-                u = start + size - 1
-                v = offsets[i + 1]
-                edges.append([u, v])
-                edges.append([v, u])
-
-        edges = np.array(edges).T
-        num_nodes = np.sum(clique_sizes)
-        rows, cols = edges[0], edges[1]
-        data = np.ones_like(rows)
-        return sp.coo_array((data, (rows, cols)), shape=(num_nodes, num_nodes))
-
-    cliques = np.array([3, 4, 3, 4, 3, 5, 5, 4, 3, 5, 4])
-    # cliques = np.array([3, 4, 3])
-    graph = get_clique_chain(cliques.tolist())
-    cores = np.repeat(cliques - 1, cliques)
-
-    # Sort nodes by increasing coreness
-    order = np.argsort(cores)
-    rorder = np.argsort(order)
-    cores = cores[order]
-    graph.coords = rorder[graph.coords[0]], rorder[graph.coords[1]]
-
-    # num_nodes = np.sum(cliques)
-    graph = sp.triu(graph, format="csr")
-
-    shell = build_shell(graph, order, cores)
-    draw_tree(shell)
+    cached_comms: dict[int, np.ndarray] = {}
+    for comm in et_comms:
+        gt_comm = find_gt_comm(cliques, new_to_old[queries[comm.queryID]])
+        if comm.commID in cached_comms:
+            et_comm = cached_comms[comm.commID]
+        else:
+            et_comm = new_to_old[comm.vertices]
+            cached_comms[comm.commID] = et_comm
+        assert_permutationally_same(et_comm, gt_comm)
 
 
-if __name__ == "__main__":
-    main()
+def test_shell_singleton_b():
+    cliques = np.array([5, 4, 3, 4, 5])
+    num_nodes = np.sum(cliques)
+    cores = np.repeat(cliques, cliques) - 1
+    edges = get_clique_chain(cliques.tolist())
+
+    graph, new_to_old, old_to_new = to_triu_adj(edges, cores)
+    new_vs = np.arange(num_nodes, dtype=np.int32)
+    new_ks = cores[new_to_old]
+    shell = ShellStruct.build(graph, new_to_old, new_ks)
+    shell.draw_tree()
+
+    queries = [np.array([old_to_new[q]]) for q in new_vs]
+    et_comms = list(search(shell, queries))
+    assert len(et_comms) == len(queries)
+
+    cached_comms: dict[int, np.ndarray] = {}
+    for comm in et_comms:
+        gt_comm = find_gt_comm(cliques, new_to_old[queries[comm.queryID]])
+        if comm.commID in cached_comms:
+            et_comm = cached_comms[comm.commID]
+        else:
+            et_comm = new_to_old[comm.vertices]
+            cached_comms[comm.commID] = et_comm
+        assert_permutationally_same(et_comm, gt_comm)
+
+
+def test_shell_pairs():
+    cliques = np.array([3, 6, 5, 3, 5, 6, 12, 3, 7, 8, 7, 7, 8, 6, 4, 3, 4, 4, 8])
+    num_nodes = np.sum(cliques)
+    cores = np.repeat(cliques, cliques) - 1
+    edges = get_clique_chain(cliques.tolist())
+
+    graph, new_to_old, old_to_new = to_triu_adj(edges, cores)
+    new_vs = np.arange(num_nodes, dtype=np.int32)
+    new_ks = cores[new_to_old]
+    shell = ShellStruct.build(graph, new_to_old, new_ks)
+    shell.draw_tree()
+
+    pairs = it.combinations(new_vs, 2)
+    queries = [np.array([old_to_new[[q1, q2]]]) for q1, q2 in pairs]
+    et_comms = list(search(shell, queries))
+    assert len(et_comms) == len(queries)
+
+    cached_comms: dict[int, np.ndarray] = {}
+    for comm in et_comms:
+        gt_comm = find_gt_comm(cliques, new_to_old[queries[comm.queryID]])
+        if comm.commID in cached_comms:
+            et_comm = cached_comms[comm.commID]
+        else:
+            et_comm = new_to_old[comm.vertices]
+            cached_comms[comm.commID] = et_comm
+        assert_permutationally_same(et_comm, gt_comm)

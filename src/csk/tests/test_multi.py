@@ -8,7 +8,7 @@ from common import (
 from csk.algs.multi import search
 
 
-def test_ksearch_singleton_simple():
+def test_multi_singleton_simple():
     cliques = [3]
     cores = np.repeat(cliques, cliques) - 1
     edges = get_clique_chain(cliques)
@@ -19,12 +19,12 @@ def test_ksearch_singleton_simple():
 
     # comms for 2-cores is the whole graph
     queries = [np.array([old_to_new[0]])]
-    et_comms = list(search(graph, new_ks, queries))
+    et_comms = list(search(graph, new_to_old, new_ks, queries))
     assert len(et_comms) == len(queries)
     assert_permutationally_same(et_comms[0].vertices, new_vs)
 
 
-def test_ksearch_singleton_a():
+def test_multi_singleton_a():
     cliques = np.array([3, 4, 5, 4, 3])
     num_nodes = np.sum(cliques)
     cores = np.repeat(cliques, cliques) - 1
@@ -35,7 +35,7 @@ def test_ksearch_singleton_a():
     new_ks = cores[new_to_old]
 
     queries = [np.array([old_to_new[q]]) for q in new_vs]
-    et_comms = list(search(graph, new_ks, queries))
+    et_comms = list(search(graph, new_to_old, new_ks, queries))
     assert len(et_comms) == len(queries)
 
     cached_comms: dict[int, np.ndarray] = {}
@@ -45,14 +45,14 @@ def test_ksearch_singleton_a():
             et_comm = cached_comms[comm.commID]
         else:
             print(comm.vertices)
-            et_comm = new_to_old[comm.vertices]
+            et_comm = comm.vertices
             cached_comms[comm.commID] = et_comm
 
         print(queries[comm.queryID], comm.coreness, comm.commID, et_comm)
         assert_permutationally_same(et_comm, gt_comm)
 
 
-def test_ksearch_singleton_b():
+def test_multi_singleton_b():
     cliques = np.array([5, 4, 3, 4, 5])
     num_nodes = np.sum(cliques)
     cores = np.repeat(cliques, cliques) - 1
@@ -63,7 +63,7 @@ def test_ksearch_singleton_b():
     new_ks = cores[new_to_old]
 
     queries = [np.array([old_to_new[q]]) for q in new_vs]
-    et_comms = list(search(graph, new_ks, queries))
+    et_comms = list(search(graph, new_to_old, new_ks, queries))
     assert len(et_comms) == len(queries)
 
     cached_comms: dict[int, np.ndarray] = {}
@@ -72,8 +72,7 @@ def test_ksearch_singleton_b():
         if comm.commID in cached_comms:
             et_comm = cached_comms[comm.commID]
         else:
-            print(comm.vertices)
-            et_comm = new_to_old[comm.vertices]
+            et_comm = comm.vertices
             cached_comms[comm.commID] = et_comm
 
         print(queries[comm.queryID], comm.coreness, comm.commID, et_comm)

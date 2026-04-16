@@ -1,6 +1,5 @@
 from collections import defaultdict
 from collections.abc import Generator
-from dataclasses import dataclass
 
 # import numba as nb
 import numpy as np
@@ -8,18 +7,14 @@ import scipy.sparse as sp
 from scipy.cluster.hierarchy import DisjointSet
 
 from ..ds.maxheap import MaxHeap
-
-
-@dataclass(frozen=True)
-class MultiSearchOutput:
-    queryID: int
-    coreness: int
-    commID: int
-    vertices: np.ndarray
+from .common import MultiSearchOutput
 
 
 def search(
-    graph: sp.csr_array, coreness: np.ndarray, queries: list[np.ndarray]
+    graph: sp.csr_array,
+    new_to_old: np.ndarray,
+    coreness: np.ndarray,
+    queries: list[np.ndarray],
 ) -> Generator[MultiSearchOutput]:
     """
     @yields
@@ -94,7 +89,7 @@ def search(
                 vertices = np.array([])
                 yield MultiSearchOutput(qID, k, curr[uf[repr]], vertices)
             else:
-                vertices = np.array(list(uf.subset(repr)))
+                vertices = new_to_old[np.array(list(uf.subset(repr)))]
                 yield MultiSearchOutput(qID, k, commID, vertices)
                 curr[uf[repr]] = commID
             commID += 1

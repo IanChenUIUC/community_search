@@ -1,4 +1,5 @@
 import dataclasses
+from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
@@ -9,7 +10,7 @@ import scipy.sparse.csgraph as cs
 
 from ..ds.auf import AnchoredUnionFind
 from ..ds.rmq import LeastCommonAncestor
-from .common import get_data, is_triu, parents_to_tree
+from .common import MultiSearchOutput, get_data, is_triu, parents_to_tree
 
 
 @dataclass(frozen=True)
@@ -38,12 +39,7 @@ class ShellStruct:
     lca: LeastCommonAncestor
 
     @classmethod
-    def build(
-        cls,
-        graph: sp.csr_array,
-        vertices: np.ndarray,
-        cores: np.ndarray,
-    ) -> Self:
+    def build(cls, graph: sp.csr_array, vs: np.ndarray, ks: np.ndarray) -> Self:
         """
         @params
             graph: sparse representation of adjacency list.
@@ -55,10 +51,10 @@ class ShellStruct:
         @returns
             ShellStruct
         """
-        assert np.all(cores[:-1] <= cores[1:])
+        assert np.all(ks[:-1] <= ks[1:])
         assert is_triu(graph)
 
-        num_vertices = len(vertices)
+        num_vertices = len(vs)
         assign = np.zeros(num_vertices, dtype=np.int32)
         parents = np.full(num_vertices, -1, dtype=np.int32)
         node_rows, node_cols, node_idx = (
@@ -69,7 +65,7 @@ class ShellStruct:
         node_id, node_cores = 0, []
 
         auf = AnchoredUnionFind.init(num_vertices)
-        counts = np.bincount(cores)
+        counts = np.bincount(ks)
         breaks = np.zeros(len(counts) + 1, dtype=np.int32)
         breaks[1:] = np.cumsum(counts)
 
@@ -105,7 +101,7 @@ class ShellStruct:
                 rik = rk[vik[vik >= l_sz] - l_sz]
                 append_node(lik, rik, k)
 
-        for k in reversed(np.unique(cores)):
+        for k in reversed(np.unique(ks)):
             process_k_shell(k)
 
         roots = np.where(parents[:node_id] == -1)[0]
@@ -126,7 +122,7 @@ class ShellStruct:
         _tree = parents_to_tree(_parents)
         _node_cores = np.array(node_cores)
         _lca = LeastCommonAncestor.build_rmq(_tree)
-        return cls(vertices, assign, _nodes, _parents, _tree, _node_cores, _lca)
+        return cls(vs, assign, _nodes, _parents, _tree, _node_cores, _lca)
 
     def save(self, filename: str) -> None:
         Path(filename).parent.mkdir(parents=True, exist_ok=True)
@@ -179,7 +175,8 @@ class ShellStruct:
             ele = stack.pop()
             stack.extend(get_data(self.tree, ele))
             data.extend(get_data(self.nodes, ele))
-        return self.vertices[np.array(data)]
+        return np.array(data)
+        # return self.vertices[np.array(data)]
 
     def draw_tree(self) -> None:
         """
@@ -225,3 +222,21 @@ class ShellStruct:
             node_children = get_data(children, root)
             for i, child in enumerate(node_children):
                 _draw(child, "", i == len(node_children) - 1)
+
+
+def search(
+    shell: ShellStruct, queries: list[np.ndarray]
+) -> Generator[MultiSearchOutput]:
+    curr: dict[np.int32, int] = dict()
+    commID = 0
+
+    for qID, query in enumerate(queries):
+        lca = shell.lca.find_lca(shell.assign[query])
+        if lca in curr:
+            vertices = np.array([])
+            yield MultiSearchOutput(qID, shell.coreness[lca], curr[lca], vertices)
+        else:
+            vertices = shell.get_vertices(lca)
+            yield MultiSearchOutput(qID, shell.coreness[lca], commID, vertices)
+            curr[lca] = commID
+            commID += 1

@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import numpy as np
 import scipy.sparse as sp
 
@@ -19,3 +21,11 @@ def parents_to_tree(parents: np.ndarray) -> sp.csr_array:
 def is_triu(graph: sp.csr_array):
     coo = graph.tocoo()
     return np.all(coo.row <= coo.col)
+
+
+@dataclass(frozen=True)
+class MultiSearchOutput:
+    queryID: int
+    coreness: int
+    commID: int
+    vertices: np.ndarray
