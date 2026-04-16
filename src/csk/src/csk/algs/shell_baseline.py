@@ -213,6 +213,8 @@ class AdvancedIndexBuilder:
         """
         Print an ASCII representation of the subtree rooted at `root`.
         Handles cycles by tracking visited nodes.
+
+        NOTE: this is LLM generated code
         """
 
         if root is None:

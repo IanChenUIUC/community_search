@@ -7,9 +7,9 @@ import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.csgraph as cs
 
-from ..algs.auf import AnchoredUnionFind
-from ..algs.common import is_triu, parents_to_tree
-from ..algs.rmq import LeastCommonAncestor, get_data
+from ..ds.auf import AnchoredUnionFind
+from ..ds.rmq import LeastCommonAncestor
+from .common import get_data, is_triu, parents_to_tree
 
 
 @dataclass(frozen=True)
@@ -184,6 +184,7 @@ class ShellStruct:
     def draw_tree(self) -> None:
         """
         Print an ASCII representation of the tree
+        NOTE: this is LLM generated code
         """
 
         parents = self.parents

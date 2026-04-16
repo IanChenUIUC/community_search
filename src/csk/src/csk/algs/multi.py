@@ -1,26 +1,37 @@
 from collections import defaultdict
 from collections.abc import Generator
+from dataclasses import dataclass
 
 # import numba as nb
 import numpy as np
 import scipy.sparse as sp
 from scipy.cluster.hierarchy import DisjointSet
 
-from ..algs.maxheap import MaxHeap
+from ..ds.maxheap import MaxHeap
 
 
-def get_row(graph: sp.csr_array, row: np.ndarray):
-    return graph.indices[graph.indptr[row] : graph.indptr[row + 1]]
+@dataclass(frozen=True)
+class MultiSearchOutput:
+    queryID: int
+    coreness: int
+    commID: int
+    vertices: np.ndarray
 
 
 def search(
     graph: sp.csr_array, coreness: np.ndarray, queries: list[np.ndarray]
-) -> Generator[tuple[int, int, set[int]], None, None]:
+) -> Generator[MultiSearchOutput]:
     """
     @yields
         the index of the query, a unique community ID, and the set of vertices
         if the communityID is repeated, then the vertex set may be empty
     """
+
+    def _get_row(graph: sp.csr_array, row: np.ndarray):
+        return graph.indices[graph.indptr[row] : graph.indptr[row + 1]]
+
+    # make it symmetric
+    undirected = graph + graph.T
 
     heap: MaxHeap = MaxHeap()
     ready: MaxHeap = MaxHeap()
@@ -30,7 +41,7 @@ def search(
     commID = 0
 
     def add_nbrs(vertex):
-        for nbr in get_row(graph, vertex):
+        for nbr in _get_row(undirected, vertex):
             if nbr in visited:
                 continue
             eval = min(coreness[vertex], coreness[nbr])
@@ -80,51 +91,14 @@ def search(
             k, (qID, _) = ready.pop()
             repr = queries[qID][0]
             if uf[repr] in curr:
-                yield qID, curr[uf[repr]], set()
+                vertices = np.array([])
+                yield MultiSearchOutput(qID, k, curr[uf[repr]], vertices)
             else:
-                yield qID, commID, uf.subset(repr)
+                vertices = np.array(list(uf.subset(repr)))
+                yield MultiSearchOutput(qID, k, commID, vertices)
                 curr[uf[repr]] = commID
             commID += 1
 
         # early return for yielded all comms
         if commID == len(queries):
             return
-
-
-def get_clique_chain(clique_sizes: list[int]):
-    assert min(clique_sizes) >= 3
-
-    n = sum(clique_sizes)
-    edges = []
-    offsets = np.cumsum([0] + clique_sizes[:-1])
-
-    for i, size in enumerate(clique_sizes):
-        start = offsets[i]
-        for u in range(start, start + size):
-            for v in range(u + 1, start + size):
-                edges.append([v, u])
-                edges.append([u, v])
-
-        if i < len(clique_sizes) - 1:
-            u = start + size - 1
-            v = offsets[i + 1]
-            edges.append([u, v])
-            edges.append([v, u])
-
-    edges = np.array(edges).T
-    rows, cols, data = edges[0], edges[1], np.ones_like(edges[0], dtype=np.bool_)
-    return sp.csr_array((data, (rows, cols)), shape=(n, n))
-
-
-def main():
-    cliques = np.array([3, 4, 3])
-    coreness = np.repeat(cliques - 1, cliques)
-    graph = get_clique_chain(cliques.tolist())
-
-    queries = [np.array([0]), np.array([2]), np.array([4]), np.array([6])]
-    for queryID, commID, comm in search(graph, coreness, queries):
-        print(f"{queryID=} {commID=} {comm=}")
-
-
-if __name__ == "__main__":
-    main()

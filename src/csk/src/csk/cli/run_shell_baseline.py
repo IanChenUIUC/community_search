@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 import networkit as nk
 
-from ..csk.shell_baseline import AdvancedIndexBuilder
+from ..algs.shell_baseline import AdvancedIndexBuilder
 
 
 @click.command()

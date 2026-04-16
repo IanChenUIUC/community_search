@@ -1,145 +1,80 @@
 import numpy as np
-from kcore_multi import run_queries, to_graph
-
-
-def get_clique_chain(clique_sizes: list[int]):
-    assert min(clique_sizes) >= 3
-
-    edges = []
-    offsets = np.cumsum([0] + clique_sizes[:-1])
-
-    for i, size in enumerate(clique_sizes):
-        start = offsets[i]
-        # Intra-clique edges
-        for u in range(start, start + size):
-            for v in range(u + 1, start + size):
-                edges.append([v, u])
-
-        # Inter-clique bridge (last node of C_i to first node of C_i+1)
-        if i < len(clique_sizes) - 1:
-            u = start + size - 1
-            v = offsets[i + 1]
-            edges.append([u, v])
-
-    edges = np.array(edges).T
-    return edges
-
-
-def generate_graph(cliques: list[int]):
-    num_nodes = np.sum(cliques)
-    edges = get_clique_chain(cliques)
-    cores_array = np.repeat(cliques, cliques) - 1
-    cores = dict(zip(np.arange(num_nodes), cores_array))
-    return to_graph(edges, cores)
-
-
-def assert_permutationally_same(a, b):
-    assert a.shape == b.shape
-    assert np.all(np.sort(a) == np.sort(b))
-
-
-def test_graph_conversion():
-    def remap_id(edges, cores, old, new):
-        edges[edges == old] = new
-        cores[new] = cores[old]
-        del cores[old]
-
-    cliques = np.array([3, 4])
-    num_nodes = np.sum(cliques)
-    edges = get_clique_chain(cliques.tolist())
-    cores_array = np.repeat(cliques, cliques) - 1
-    cores = dict(zip(np.arange(num_nodes), cores_array))
-
-    # remapping some arbitrary node IDs
-    remap_id(edges, cores, 2, 232)
-    remap_id(edges, cores, 4, 136)
-
-    graph, remapping = to_graph(edges, cores)
-    formapping = dict(zip(remapping, np.arange(num_nodes)))
-
-    # FIXME: write the test instead of just printing it out lol
-    print()
-    print(graph.todense())
-    print(remapping)
-    print(formapping)
+from common import (
+    assert_permutationally_same,
+    find_gt_comm,
+    get_clique_chain,
+    to_triu_adj,
+)
+from csk.algs.multi import search
 
 
 def test_ksearch_singleton_simple():
     cliques = [3]
-    num_nodes = np.sum(cliques)
     cores = np.repeat(cliques, cliques) - 1
-    graph, _ = generate_graph(cliques)
+    edges = get_clique_chain(cliques)
 
-    # work with the newIDs
-    vertices = np.arange(num_nodes)
+    graph, new_to_old, old_to_new = to_triu_adj(edges, cores)
+    new_vs = np.arange(cliques[0])
+    new_ks = cores[new_to_old]
 
     # comms for 2-cores is the whole graph
-    for q in vertices:
-        comms = run_queries(graph, [np.array([q])], cores)
-        _, comm = next(comms)
-        assert_permutationally_same(comm, vertices)
+    queries = [np.array([old_to_new[0]])]
+    et_comms = list(search(graph, new_ks, queries))
+    assert len(et_comms) == len(queries)
+    assert_permutationally_same(et_comms[0].vertices, new_vs)
 
 
 def test_ksearch_singleton_a():
-    print()
-    cliques = [3, 4, 5, 4, 3]
+    cliques = np.array([3, 4, 5, 4, 3])
     num_nodes = np.sum(cliques)
-    graph, remapping = generate_graph(cliques)
     cores = np.repeat(cliques, cliques) - 1
+    edges = get_clique_chain(cliques.tolist())
 
-    vertices = np.arange(num_nodes, dtype=int)
-    formapping = dict(zip(remapping, np.arange(num_nodes)))
-    remapped_cores = cores[remapping[vertices]]
+    graph, new_to_old, old_to_new = to_triu_adj(edges, cores)
+    new_vs = np.arange(num_nodes, dtype=np.int32)
+    new_ks = cores[new_to_old]
 
-    queries = [np.array([formapping[q]]) for q in vertices]
-    # et_comms = list(run_queries(graph, queries, remapped_cores))
+    queries = [np.array([old_to_new[q]]) for q in new_vs]
+    et_comms = list(search(graph, new_ks, queries))
+    assert len(et_comms) == len(queries)
 
-    # print(formapping)
-    et_comms = list(run_queries(graph, [np.array([4]), np.array([11])], remapped_cores))
-    print(remapping[et_comms[0][1]])
-    print(remapping[et_comms[1][1]])
-    return
+    cached_comms: dict[int, np.ndarray] = {}
+    for comm in et_comms:
+        gt_comm = find_gt_comm(cliques, new_to_old[queries[comm.queryID]])
+        if comm.commID in cached_comms:
+            et_comm = cached_comms[comm.commID]
+        else:
+            print(comm.vertices)
+            et_comm = new_to_old[comm.vertices]
+            cached_comms[comm.commID] = et_comm
 
-    assert len(et_comms) == num_nodes
-
-    for q, et_comm in et_comms:
-        gt_comm = vertices[cores >= cores[remapping[queries[q]]]]
-        et_comm = remapping[et_comm]
-
-        print(remapping[queries[q]], np.sort(et_comm), gt_comm)
+        print(queries[comm.queryID], comm.coreness, comm.commID, et_comm)
         assert_permutationally_same(et_comm, gt_comm)
 
 
 def test_ksearch_singleton_b():
-    cliques = [5, 4, 3, 4, 5]
+    cliques = np.array([5, 4, 3, 4, 5])
     num_nodes = np.sum(cliques)
-    graph, remapping = generate_graph(cliques)
     cores = np.repeat(cliques, cliques) - 1
+    edges = get_clique_chain(cliques.tolist())
 
-    vertices = np.arange(num_nodes)
-    formapping = dict(zip(remapping, np.arange(num_nodes)))
-    remapped_cores = cores[remapping[vertices]]
+    graph, new_to_old, old_to_new = to_triu_adj(edges, cores)
+    new_vs = np.arange(num_nodes, dtype=np.int32)
+    new_ks = cores[new_to_old]
 
-    gt_comms = []
-    for _ in range(5):
-        gt_comms.append(np.arange(5))
-    for _ in range(4):
-        gt_comms.append(np.arange(9))
-    for _ in range(3):
-        gt_comms.append(np.arange(21))
-    for _ in range(4):
-        gt_comms.append(np.arange(12, 21))
-    for _ in range(4):
-        gt_comms.append(np.arange(16, 21))
+    queries = [np.array([old_to_new[q]]) for q in new_vs]
+    et_comms = list(search(graph, new_ks, queries))
+    assert len(et_comms) == len(queries)
 
-    for q, gt_comm in enumerate(gt_comms):
-        query = np.array([formapping[q]])
-        et_comms = run_queries(graph, [query], remapped_cores)
-        _, et_comm = next(et_comms)
-        et_comm = remapping[et_comm]
+    cached_comms: dict[int, np.ndarray] = {}
+    for comm in et_comms:
+        gt_comm = find_gt_comm(cliques, new_to_old[queries[comm.queryID]])
+        if comm.commID in cached_comms:
+            et_comm = cached_comms[comm.commID]
+        else:
+            print(comm.vertices)
+            et_comm = new_to_old[comm.vertices]
+            cached_comms[comm.commID] = et_comm
 
-        # print(query, et_comm, gt_comm)
+        print(queries[comm.queryID], comm.coreness, comm.commID, et_comm)
         assert_permutationally_same(et_comm, gt_comm)
-
-
-test_ksearch_singleton_a()

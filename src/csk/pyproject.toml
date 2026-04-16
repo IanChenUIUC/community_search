@@ -18,7 +18,11 @@ dependencies = [
 ]
 
 [project.scripts]
-csk = "csk:main"
+csk = "csk.cli.kcore:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
 
 [build-system]
 requires = ["uv_build>=0.8.8,<0.9.0"]

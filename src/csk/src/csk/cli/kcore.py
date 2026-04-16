@@ -9,15 +9,15 @@ from .run_shell_compressed import (
 
 
 @click.group()
-def kcore():
+def main():
     pass
 
 
-kcore.add_command(shell_baseline_index)
-kcore.add_command(shell_baseline_search)
-kcore.add_command(shell_compressed_index)
-kcore.add_command(shell_compressed_build)
-kcore.add_command(shell_compressed_search)
+main.add_command(shell_baseline_index)
+main.add_command(shell_baseline_search)
+main.add_command(shell_compressed_index)
+main.add_command(shell_compressed_build)
+main.add_command(shell_compressed_search)
 
 if __name__ == "__main__":
-    kcore()
+    main()
