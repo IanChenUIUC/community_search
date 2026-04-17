@@ -19,7 +19,7 @@ def test_shell_singleton_a():
     graph, new_to_old, old_to_new = to_triu_adj(edges, cores)
     new_vs = np.arange(num_nodes, dtype=np.int32)
     new_ks = cores[new_to_old]
-    shell = ShellStruct.build(graph, new_to_old, new_ks)
+    shell = ShellStruct.build(graph, old_to_new, new_to_old, new_ks)
     shell.draw_tree()
 
     queries = [np.array([old_to_new[q]]) for q in new_vs]
@@ -46,7 +46,7 @@ def test_shell_singleton_b():
     graph, new_to_old, old_to_new = to_triu_adj(edges, cores)
     new_vs = np.arange(num_nodes, dtype=np.int32)
     new_ks = cores[new_to_old]
-    shell = ShellStruct.build(graph, new_to_old, new_ks)
+    shell = ShellStruct.build(graph, old_to_new, new_to_old, new_ks)
     shell.draw_tree()
 
     queries = [np.array([old_to_new[q]]) for q in new_vs]
@@ -73,11 +73,11 @@ def test_shell_pairs():
     graph, new_to_old, old_to_new = to_triu_adj(edges, cores)
     new_vs = np.arange(num_nodes, dtype=np.int32)
     new_ks = cores[new_to_old]
-    shell = ShellStruct.build(graph, new_to_old, new_ks)
+    shell = ShellStruct.build(graph, old_to_new, new_to_old, new_ks)
     shell.draw_tree()
 
     pairs = it.combinations(new_vs, 2)
-    queries = [np.array([old_to_new[[q1, q2]]]) for q1, q2 in pairs]
+    queries = [np.array(old_to_new[[q1, q2]]) for q1, q2 in pairs]
     et_comms = list(search(shell, queries))
     assert len(et_comms) == len(queries)
 

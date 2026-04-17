@@ -1,8 +1,16 @@
-import networkit as nk
+from collections.abc import Generator
+
+import numpy as np
+
+from .common import MultiSearchOutput
 
 """
-K-core with an index structure based on ShellStruct (N. Barbieri, F. Bonchi, E. Galimberti, and F. Gullo. Efficient and effective community search. DMKD, 29(5):1406–1433, 2015.)
-Implement the advanced algorithm to build the index (Y. Fang, R. Cheng, S. Luo, and J. Hu. Effective community search for large attributed graphs. PVLDB, 9(12):1233–1244, Aug. 2016.)
+K-core with an index structure based on ShellStruct
+    (N. Barbieri, F. Bonchi, E. Galimberti, and F. Gullo. Efficient and effective
+    community search. DMKD, 29(5):1406–1433, 2015.)
+Implement the advanced algorithm to build the index
+    (Y. Fang, R. Cheng, S. Luo, and J. Hu. Effective community search for large
+    attributed graphs. PVLDB, 9(12):1233–1244, Aug. 2016.)
 """
 
 
@@ -66,7 +74,7 @@ class AdvancedIndexBuilder:
                         bfs.extend(cur.children)
 
         {v: k for k, v in node_to_id.items()}
-        # Build a flat list: each entry is (core_num, vertex_set, parent_id, [child_ids])
+        # Flat list: each entry is (core_num, vertex_set, parent_id, [child_ids])
         obj_map = {}  # python id(obj) -> obj, for lookup
         for treenode in self.v_to_treenode.values():
             obj_map[id(treenode)] = treenode
@@ -114,6 +122,8 @@ class AdvancedIndexBuilder:
         self.anchor_map = {}
 
     def build(self):
+        import networkit as nk
+
         core = nk.centrality.CoreDecomposition(self.graph).run()
         k_max = core.maxCoreNumber()
         k_shells = core.getPartition()
@@ -137,7 +147,7 @@ class AdvancedIndexBuilder:
             if not k_shell_nodes:
                 continue  # no nodes for this layer
 
-            # find connected components at this level, taking previous CCs into consideration
+            # find connected components at this level, accounting for CCs
             k_prime_nodes = set()  # all connected components in k'-cores where k' < k
             for v in k_shell_nodes:
                 k_prime_nodes.add(uf.find(v))
@@ -264,41 +274,34 @@ class AdvancedIndexBuilder:
         while node is not None:
             result.add(node)
             node = node.parent
-        # print(f"Ancestor found for node {node}")
         return result
 
-    def find_kcore(self, queries, k):
-        """Returns (resolved_k, sorted_vertices). resolved_k is the actual
-        core number used (matters when k=-1)."""
+    def find_kcore(self, query, kmin):
+        """Returns (resolved_k, sorted_vertices).
+        resolved_k is the actual core number used (matters when k=-1)."""
         nodes = []
-        for q in queries:
+        for q in query:
             if q not in self.v_to_treenode:
-                return k, []
+                return kmin, np.array([])
+
             node = self.v_to_treenode[q]
-            if k == -1:
-                # just stay at the node - this is the highest k possible
-                pass
-            elif node.core_num < k:
-                return k, []
-            else:
-                # walk up to the first ancestor with core_num <= k
-                while node.parent and node.parent.core_num >= k:
-                    node = node.parent
             nodes.append(node)
+            if node.core_num < kmin:
+                return kmin, np.array([])
 
         # intersecting ancestor sets to find LCA
         lca_candidates = self.ancestors(nodes[0])
         for node in nodes[1:]:
             lca_candidates &= self.ancestors(node)
-
-        if not lca_candidates:
-            return k, []
+        assert lca_candidates
 
         # LCA is the deepest common ancestor (highest core_num)
-        lca = max(lca_candidates, key=lambda n: n.core_num)
+        lca: CLTreeNode = max(lca_candidates, key=lambda n: n.core_num)
+        while lca.parent is not None and lca.parent.core_num == lca.core_num:
+            lca = lca.parent
 
-        if k != -1 and lca.core_num < k:
-            return k, []
+        if kmin != -1 and lca.core_num < kmin:
+            return kmin, np.array([])
 
         # collect all vertices from the LCA and its descendants
         vertices = set()
@@ -307,4 +310,12 @@ class AdvancedIndexBuilder:
             cur = stack.pop()
             vertices.update(cur.vertex_set)
             stack.extend(cur.children)
-        return lca.core_num, sorted(vertices)
+        return lca.core_num, np.array(list(vertices))
+
+
+def search(
+    shell: AdvancedIndexBuilder, queries: list[np.ndarray]
+) -> Generator[MultiSearchOutput]:
+    for qID, query in enumerate(queries):
+        k, comm = shell.find_kcore(query, -1)
+        yield MultiSearchOutput(qID, k, qID, comm)

@@ -1,7 +1,6 @@
 from collections import defaultdict
 from collections.abc import Generator
 
-# import numba as nb
 import numpy as np
 import scipy.sparse as sp
 from scipy.cluster.hierarchy import DisjointSet
@@ -17,6 +16,8 @@ def search(
     queries: list[np.ndarray],
 ) -> Generator[MultiSearchOutput]:
     """
+    treats graph as directed.
+
     @yields
         the index of the query, a unique community ID, and the set of vertices
         if the communityID is repeated, then the vertex set may be empty
@@ -25,9 +26,7 @@ def search(
     def _get_row(graph: sp.csr_array, row: np.ndarray):
         return graph.indices[graph.indptr[row] : graph.indptr[row + 1]]
 
-    # make it symmetric
-    undirected = graph + graph.T
-
+    remaining: set[int] = set(range(len(queries)))
     heap: MaxHeap = MaxHeap()
     ready: MaxHeap = MaxHeap()
     visited: set[int] = set()
@@ -36,9 +35,7 @@ def search(
     commID = 0
 
     def add_nbrs(vertex):
-        for nbr in _get_row(undirected, vertex):
-            if nbr in visited:
-                continue
+        for nbr in _get_row(graph, vertex):
             eval = min(coreness[vertex], coreness[nbr])
             heap.push(eval, (vertex, nbr))
 
@@ -59,7 +56,12 @@ def search(
             _, (u, v) = heap.pop()
 
             if v not in visited:
+                root_u = uf[u]
                 uf.merge(u, v)
+                if uf[u] != root_u:
+                    terminals[uf[u]] = terminals[root_u]
+                    del terminals[root_u]
+
                 visited.add(v)
                 add_nbrs(v)
 
@@ -83,17 +85,22 @@ def search(
 
         curr = dict()
         while not ready.is_empty() and ready.peek()[0] >= k:
-            k, (qID, _) = ready.pop()
+            ready_k, (qID, _) = ready.pop()
+            remaining.remove(qID)
             repr = queries[qID][0]
             if uf[repr] in curr:
                 vertices = np.array([])
-                yield MultiSearchOutput(qID, k, curr[uf[repr]], vertices)
+                yield MultiSearchOutput(qID, ready_k, curr[uf[repr]], vertices)
             else:
                 vertices = new_to_old[np.array(list(uf.subset(repr)))]
-                yield MultiSearchOutput(qID, k, commID, vertices)
+                yield MultiSearchOutput(qID, ready_k, commID, vertices)
                 curr[uf[repr]] = commID
             commID += 1
 
         # early return for yielded all comms
         if commID == len(queries):
             return
+
+    for query in remaining:
+        yield MultiSearchOutput(query, 0, commID, np.array([]))
+        commID += 1

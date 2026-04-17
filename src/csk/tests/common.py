@@ -66,11 +66,11 @@ def to_triu_adj(
     """
 
     n = cores.size
-    orig = np.arange(n, dtype=np.int64)
+    orig = np.arange(n, dtype=np.int32)
     order = np.lexsort((orig, cores))  # order[newID] -> originalID
 
-    rank_map = np.empty(n, dtype=np.int64)
-    rank_map[order] = np.arange(n, dtype=np.int64)
+    rank_map = np.empty(n, dtype=np.int32)
+    rank_map[order] = np.arange(n, dtype=np.int32)
 
     # remap edges to new ids
     unew = rank_map[edges.row]

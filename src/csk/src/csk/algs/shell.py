@@ -17,6 +17,8 @@ from .common import MultiSearchOutput, get_data, is_triu, parents_to_tree
 class ShellStruct:
     # mapping back to the user vertices
     vertices: np.ndarray
+    # mapping from contigous to re-ordered
+    order: np.ndarray
 
     # assign[j] = TreeNode of vertex j
     assign: np.ndarray
@@ -39,7 +41,9 @@ class ShellStruct:
     lca: LeastCommonAncestor
 
     @classmethod
-    def build(cls, graph: sp.csr_array, vs: np.ndarray, ks: np.ndarray) -> Self:
+    def build(
+        cls, graph: sp.csr_array, vs: np.ndarray, order: np.ndarray, ks: np.ndarray
+    ) -> Self:
         """
         @params
             graph: sparse representation of adjacency list.
@@ -122,7 +126,7 @@ class ShellStruct:
         _tree = parents_to_tree(_parents)
         _node_cores = np.array(node_cores)
         _lca = LeastCommonAncestor.build_rmq(_tree)
-        return cls(vs, assign, _nodes, _parents, _tree, _node_cores, _lca)
+        return cls(vs, order, assign, _nodes, _parents, _tree, _node_cores, _lca)
 
     def save(self, filename: str) -> None:
         Path(filename).parent.mkdir(parents=True, exist_ok=True)
@@ -193,8 +197,8 @@ class ShellStruct:
         num_nodes = parents.shape[0]
 
         def _node_label(node: int) -> str:
-            vertices = self.vertices[get_data(nodes, node)].tolist()
-            return f"Node {node} (k: {coreness[node]}, vertices: {np.sort(vertices)})"
+            vertices = np.sort(self.vertices[get_data(nodes, node)])[:24]
+            return f"Node {node} (k: {coreness[node]}, vertices: {vertices})"
 
         def _draw(node, prefix="", is_last=True):
             if node in visited:
@@ -229,10 +233,9 @@ def search(
 ) -> Generator[MultiSearchOutput]:
     curr: dict[np.int32, int] = dict()
     commID = 0
-
     for qID, query in enumerate(queries):
         lca = shell.lca.find_lca(shell.assign[query])
-        if lca in curr:
+        if lca in curr or shell.coreness[lca] == 0:
             vertices = np.array([])
             yield MultiSearchOutput(qID, shell.coreness[lca], curr[lca], vertices)
         else:
