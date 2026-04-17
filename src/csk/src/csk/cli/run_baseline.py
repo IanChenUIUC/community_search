@@ -4,7 +4,7 @@ import click
 import numpy as np
 import scipy.sparse as sp
 
-from csk.algs.steiner import search
+from csk.algs.baseline import search
 from csk.cli.common import get_queries
 
 
@@ -14,7 +14,7 @@ from csk.cli.common import get_queries
 @click.option("--coreslist", required=True, type=click.Path(exists=True))
 @click.option("--nodelist", required=True, type=click.Path(exists=True))
 @click.option("--outputdir", required=True, type=click.Path())
-def steiner_search(edges, nodemap, coreslist, nodelist, outputdir):
+def baseline_search(edges, nodemap, coreslist, nodelist, outputdir):
     cores = np.loadtxt(coreslist, dtype=np.int32)
     mapping = np.loadtxt(nodemap, dtype=np.int32)
     length = cores.size
@@ -34,10 +34,8 @@ def steiner_search(edges, nodemap, coreslist, nodelist, outputdir):
         kmins.append(kmin)
         queries.append(query)
 
-    et_comms = search(graph, mapping, cores, queries)
+    et_comms = search(graph, mapping, cores, queries, kmins)
     for comm in et_comms:
-        print(comm.queryID, comm.coreness, comm.commID)
-
         path = output / f"query{comm.queryID}_k{comm.coreness}.txt"
         if comm.coreness < kmins[comm.queryID]:
             np.savetxt(path, np.array([]))
