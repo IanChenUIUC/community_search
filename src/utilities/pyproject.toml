@@ -1,0 +1,14 @@
+[project]
+name = "utilities"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "format-conversion",
+    "icebug>=12.9",
+    "pyarrow>=24.0.0",
+]
+
+[tool.uv.sources]
+format-conversion = { git = "https://github.com/IanChenUIUC/format-conversion.git" }

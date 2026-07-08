@@ -1,0 +1,50 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>communitysearch</groupId>
+  <artifactId>community-search</artifactId>
+  <version>1.0</version>
+  <packaging>jar</packaging>
+
+  <properties>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <dependencies>
+    <!-- Old-style Kryo: this codebase uses UnsafeMemoryInput/UnsafeMemoryOutput,
+         which only exist in the 2.x line. Do not bump this without patching
+         main/Graph.java and index/{Index,TreeIndex}.java. -->
+    <dependency>
+      <groupId>com.esotericsoftware.kryo</groupId>
+      <artifactId>kryo</artifactId>
+      <version>2.24.0</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>community-search</finalName>
+    <plugins>
+      <!-- Copies all dependency jars (just Kryo + its transitive deps) into
+           target/dependency, so we can build a simple classpath by hand. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>3.6.1</version>
+        <executions>
+          <execution>
+            <id>copy-dependencies</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}/dependency</outputDirectory>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -1,6 +1,9 @@
-[submodule "src/ucrparlay"]
-	path = src/ucrparlay
+[submodule "src/ucrparlay-core-decomposition"]
+	path = src/ucrparlay-core-decomposition
 	url = https://github.com/ucrparlay/Parallel-KCore
-[submodule "src/gbbs"]
-	path = src/gbbs
+[submodule "src/gbbs-core-decomposition"]
+	path = src/gbbs-core-decomposition
 	url = https://github.com/ParAlg/gbbs
+[submodule "src/pkc-core-decomposition"]
+	path = src/pkc-core-decomposition
+	url = https://github.com/humayunk1/PKC

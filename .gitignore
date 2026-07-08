@@ -1,1 +1,17 @@
+input/
+
+**/output/
+**/target/
+
 **/.cache/
+**/__pycache__/
+**/*.py[oc]
+**/build/
+**/dist/
+**/wheels/
+**/*.egg-info
+**/.venv
+
+**/.settings
+**/.classpath
+**/.project

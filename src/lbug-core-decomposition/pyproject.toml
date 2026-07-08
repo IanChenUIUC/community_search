@@ -1,0 +1,13 @@
+[project]
+name = "lbug-core-decomposition"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "click>=8.4.2",
+    "ladybug>=0.18.0",
+    "numpy>=2.5.1",
+    "polars[rt64]>=1.42.1",
+    "pyarrow>=24.0.0",
+]
