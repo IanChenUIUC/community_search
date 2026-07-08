@@ -1,2 +1,0 @@
-python3 ./scripts/b02f7676/timing.py
-python3 ./scripts/b02f7676/summarize.py

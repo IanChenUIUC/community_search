@@ -1,1 +1,0 @@
-python3 ./scripts/fb6fbaba/scripts/correctness.py
