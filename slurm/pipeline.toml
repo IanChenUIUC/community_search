@@ -1,0 +1,206 @@
+[defaults.slurm]
+cpus = 1
+mem  = "16GB"
+time = "4:00:00"
+partition = "secondary"
+
+[defaults]
+# root = "/models/ianchen3/community_search"
+root = "/u/ianchen3/community_search"
+input = "${root}/input"
+output = "${root}/output"
+
+[recipe.build]
+stdout  = "${output}/build.out"
+stderr  = "${output}/build.err"
+timing  = "${output}/build.resources"
+
+command = """
+mkdir -p ${output}
+/usr/bin/time -v -a -o ${timing} bash -c "
+  cd ${root}/src/gbbs-core-decomposition && bazel build //...
+  cd ${root}/src/ucrparlay-core-decomposition/KCore && make
+  cd ${root}/src/pkc-core-decomposition && make
+  cd ${root}/src/csk-commsearch && make
+  cd ${root}/src/gullo-shellstruct && mvn compile
+  cd ${root}/src/utilities && uv sync --reinstall --refresh
+  cd ${root}/src/lbug-core-decomposition && uv sync --reinstall --refresh
+" 1> ${stdout} 2> ${stderr} 
+"""
+
+[recipe.gbbs-format]
+params  = { dataset = ["dnc"] }
+deps    = ["build"]
+
+stdout  = "${output}/${dataset}.gbbs-format.out"
+stderr  = "${output}/${dataset}.gbbs-format.err"
+timing  = "${output}/${dataset}.gbbs-format.resources"
+
+command = """
+mkdir -p ${output}
+/usr/bin/time -v -a -o ${timing} \
+  ${root}/src/utilities/csv2gbbs.sh  \
+    ${input}/${dataset}.csv \
+    ${input}/${dataset}.gbbs.adj \
+  1> ${stdout} 2> ${stderr} 
+"""
+
+[recipe.pkc-format]
+params  = { dataset = ["dnc"] }
+deps    = ["build"]
+
+stdout  = "${output}/${dataset}.pkc-format.out"
+stderr  = "${output}/${dataset}.pkc-format.err"
+timing  = "${output}/${dataset}.pkc-format.resources"
+
+command = """
+mkdir -p ${output}
+/usr/bin/time -v -a -o ${timing} \
+  ${root}/src/utilities/csv2pkc.sh  \
+    ${input}/${dataset}.csv \
+    ${input}/${dataset}.pkc.adj \
+  1> ${stdout} 2> ${stderr} 
+"""
+
+[recipe.csr-format]
+params  = { dataset = ["dnc"] }
+deps    = ["build"]
+
+stdout  = "${output}/${dataset}.csr-format.out"
+stderr  = "${output}/${dataset}.csr-format.err"
+timing  = "${output}/${dataset}.csr-format.resources"
+
+command = """
+mkdir -p ${output}
+/usr/bin/time -v -a -o ${timing} \
+  uv run --project ${root}/src/utilities ${root}/src/utilities/csv2csr.py  \
+    ${input}/${dataset}.csv \
+    ${input}/${dataset} \
+  1> ${stdout} 2> ${stderr} 
+/usr/bin/time -v -a -o ${timing} \
+  uv run --project ${root}/src/utilities ${root}/src/utilities/pq2pf.py  \
+    ${input}/${dataset}.indptr.parquet \
+    ${input}/${dataset}.indices.parquet \
+  1>> ${stdout} 2>> ${stderr} 
+"""
+
+[recipe.lbug-format]
+params  = { dataset = ["dnc"] }
+deps    = ["build"]
+
+stdout  = "${output}/${dataset}.lbug-format.out"
+stderr  = "${output}/${dataset}.lbug-format.err"
+timing  = "${output}/${dataset}.lbug-format.resources"
+
+command = """
+mkdir -p ${output}
+/usr/bin/time -v -a -o ${timing} \
+  uv run --project ${root}/src/utilities ${root}/src/utilities/csv2csr.py  \
+    ${input}/${dataset}.csv \
+    ${input}/${dataset}.lbug \
+    --no-symmetrize \
+  1> ${stdout} 2> ${stderr} 
+"""
+
+[recipe.gbbs-core-decomp]
+params  = { dataset = ["dnc"] }
+deps    = ["gbbs-format(dataset=${dataset})"]
+
+stdout  = "${output}/${dataset}.gbbs-core-decomp.out"
+stderr  = "${output}/${dataset}.gbbs-core-decomp.err"
+timing  = "${output}/${dataset}.gbbs-core-decomp.resources"
+
+command = """
+mkdir -p ${output}
+/usr/bin/time -v -a -o ${timing} \
+  ${root}/src/gbbs-core-decomposition/bazel-bin/benchmarks/KCore/JulienneDBS17/KCore_main -s -rounds 1 \
+    -o ${output}/${dataset}.gbbs.cores.csv \
+    ${input}/${dataset}.gbbs.adj \
+  1> ${stdout} 2> ${stderr} 
+"""
+
+[recipe.ucr-core-decomp]
+params  = { dataset = ["dnc"] }
+deps    = ["gbbs-format(dataset=${dataset})"]
+
+stdout  = "${output}/${dataset}.ucr-core-decomp.out"
+stderr  = "${output}/${dataset}.ucr-core-decomp.err"
+timing  = "${output}/${dataset}.ucr-core-decomp.resources"
+
+command = """
+mkdir -p ${output}
+/usr/bin/time -v -a -o ${timing} \
+  ${root}/src/ucrparlay-core-decomposition/KCore/kcore -s \
+    -i ${input}/${dataset}.gbbs.adj \
+    -o ${output}/${dataset}.ucr.cores.csv \
+    -l ${stdout} \
+  1> ${stdout} 2> ${stderr} 
+"""
+
+[recipe.pkc-core-decomp]
+params  = { dataset = ["dnc"] }
+deps    = ["pkc-format(dataset=${dataset})"]
+
+stdout  = "${output}/${dataset}.pkc-core-decomp.out"
+stderr  = "${output}/${dataset}.pkc-core-decomp.err"
+timing  = "${output}/${dataset}.pkc-core-decomp.resources"
+
+command = """
+mkdir -p ${output}
+/usr/bin/time -v -a -o ${timing} \
+  ${root}/src/pkc-core-decomposition/pkc.exe \
+    ${input}/${dataset}.pkc.adj \
+    ${output}/${dataset}.pkc.cores.csv \
+  1> ${stdout} 2> ${stderr} 
+"""
+
+[recipe.lbug-core-decomp]
+params  = { dataset = ["dnc"] }
+deps    = ["csr-format(dataset=${dataset})"]
+
+stdout  = "${output}/${dataset}.lbug-core-decomp.out"
+stderr  = "${output}/${dataset}.lbug-core-decomp.err"
+timing  = "${output}/${dataset}.lbug-core-decomp.resources"
+
+command = """
+mkdir -p ${output}
+/usr/bin/time -v -a -o ${timing} \
+  uv run --project ${root}/src/lbug-core-decomposition ${root}/src/lbug-core-decomposition/main.py \
+    ${input}/${dataset}.lbug.indptr.parquet \
+    ${input}/${dataset}.lbug.indices.parquet \
+    ${output}/${dataset}.lbug.cores.csv \
+  1> ${stdout} 2> ${stderr} 
+"""
+
+[recipe.nk-core-decomp]
+params  = { dataset = ["dnc"] }
+deps    = ["csr-format(dataset=${dataset})"]
+
+stdout  = "${output}/${dataset}.nk-core-decomp.out"
+stderr  = "${output}/${dataset}.nk-core-decomp.err"
+timing  = "${output}/${dataset}.nk-core-decomp.resources"
+
+command = """
+mkdir -p ${output}
+/usr/bin/time -v -a -o ${timing} \
+  uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/main.py \
+    --edgelist ${input}/${dataset}.csv \
+    --output ${output}/${dataset}.nk.cores.csv \
+  1> ${stdout} 2> ${stderr} 
+"""
+
+[recipe.network-stats]
+params  = { dataset = ["dnc"] }
+deps    = ["csr-format(dataset=${dataset})"]
+
+stdout  = "${output}/${dataset}.network-stats.out"
+stderr  = "${output}/${dataset}.network-stats.err"
+timing  = "${output}/${dataset}.network-stats.resources"
+
+command = """
+mkdir -p ${output}
+/usr/bin/time -v -a -o ${timing} \
+  uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/network-stats.py \
+    --edgelist ${input}/${dataset}.csv \
+  1> ${stdout} 2> ${stderr} 
+"""
