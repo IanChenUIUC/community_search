@@ -27,8 +27,8 @@ def _read_column(path: str, column: str) -> pa.Array:
 def main(indptr_path: str, indices_path: str, out_path: str) -> None:
     """Core Decomposition using LadyBug"""
     indptr_arr = _read_column(indptr_path, "indptr")  # pa.uint64
-    indices_arr = _read_column(indices_path, "indices")  # pa.uint64
-    n_nodes, n_edges = len(indptr_arr) - 1, len(indices_arr) // 2
+    indices_arr = _read_column(indices_path, "indices")  # pa.uint64; not symmetrized
+    n_nodes, n_edges = len(indptr_arr) - 1, len(indices_arr)
 
     db = lb.Database()
     conn = lb.Connection(db)
@@ -62,7 +62,7 @@ def main(indptr_path: str, indices_path: str, out_path: str) -> None:
         .join(cores, on="id", how="left")
         .with_columns(pl.col("core").fill_null(0).cast(pl.Int64))
         .sort("id")
-        .write_csv(out_path)
+        .write_csv(out_path, include_header=False)
     )
 
     print(

@@ -29,7 +29,7 @@ HEADER=$(awk -F',' '
 echo "$HEADER" > "$OUTPUT_FILE"
 
 # Append the original edgelist data
-cat "$INPUT_FILE" >> "$OUTPUT_FILE"
+tail -n +2 "$INPUT_FILE" >> "$OUTPUT_FILE"
 
 echo "Done! Saved to $OUTPUT_FILE"
 echo "Header added (nodes,edges): $HEADER"

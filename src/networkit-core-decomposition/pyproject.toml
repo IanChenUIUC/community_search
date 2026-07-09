@@ -1,0 +1,11 @@
+[project]
+name = "networkit-core-decomposition"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "click>=8.4.2",
+    "networkit>=11.2.1",
+    "pandas>=3.0.3",
+]

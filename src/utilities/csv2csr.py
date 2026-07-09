@@ -1,42 +1,33 @@
 from pathlib import Path
+
+import click
 import format_conversion.format as fmt
 
-INPUT = Path("input")
-OUTPUT = Path("output")
 
+@click.command()
+@click.argument("input_csv", type=click.Path(exists=True))
+@click.argument("output_csr", type=click.Path(dir_okay=False))
+@click.option("--symmetrize/--no-symmetrize", "-s/-ns", default=True)
+def main(input_csv, output_csr, symmetrize=True) -> None:
+    input_fmt = fmt.EdgesFormat.CSV_EDGELIST
+    output_fmt = fmt.EdgesFormat.CSR_PARQUET
 
-def main() -> None:
-    # ── Input ──────────────────────────────────────────────────────────
-    input_fmt = fmt.EdgesFormat.CSV_EDGELIST  ## CHANGEME
+    input_opts = fmt.ParseOptions()
+    input_opts.skip_rows = 1
+    input_opts.sep = ","
+    input_opts.directed = not symmetrize
+    output_opts = fmt.ParseOptions()
+    output_opts.use_u64_indices = True
+    graph = fmt.GraphDescriptor(input_csv, input_fmt, input_opts)
 
-    node_opts = fmt.ParseOptions()
-    node_opts.skip_rows = 1  # header
-    nodes_file = INPUT / "dnc_nodes.csv"
-
-    edge_opts = fmt.ParseOptions()
-    if input_fmt == fmt.EdgesFormat.CSV_EDGELIST:
-        edge_opts.skip_rows = 1  # header
-        edges_file = INPUT / "dnc_edges.csv"
-    if input_fmt == fmt.EdgesFormat.CSR_PARQUET:
-        edges_file = INPUT / "dnc.indices.parquet"
-    if input_fmt == fmt.EdgesFormat.METIS:
-        edges_file = INPUT / "dnc.metis"
-
-    # ── Output ───────────────────────────────────────────
-    output_fmt = fmt.EdgesFormat.CSR_PARQUET  ## CHANGEME
-
-    if output_fmt == fmt.EdgesFormat.CSV_EDGELIST:
-        output_path = OUTPUT / "dnc_edges"
-    if output_fmt == fmt.EdgesFormat.CSR_PARQUET:
-        edge_opts.use_u64_indices = True  # indices as uint64
-        output_path = OUTPUT / "dnc"
-    if output_fmt == fmt.EdgesFormat.METIS:
-        output_path = OUTPUT / "dnc"
-
-    # ── Convert ───────────────────────────────────────────
-    graph = fmt.GraphDescriptor(edges_file, input_fmt, edge_opts)
-    nodes = fmt.NodeDescriptor(nodes_file, node_opts)
-    fmt.convert(graph, nodes, output_path=output_path, output_fmt=output_fmt)
+    Path(output_csr).parent.mkdir(exist_ok=True, parents=True)
+    fmt.convert(
+        graph,
+        nodes=None,
+        output_path=output_csr,
+        output_fmt=output_fmt,
+        output_opts=output_opts,
+    )
 
 
 if __name__ == "__main__":

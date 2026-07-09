@@ -9,18 +9,26 @@ fi
 
 INPUT_CSV="$1"
 OUTPUT_ADJ="$2"
-ABS_OUTPUT=$(realPath "$OUTPUT_ADJ" 2>/dev/null || readlink -f "$OUTPUT_ADJ")
 
-TEMP_SNAP=$(mktemp "$(pwd)/gbbs_stream_XXXXXX.txt")
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GBBS_DIR="$(realpath "$SCRIPT_DIR/../gbbs-core-decomposition")"
+
+ABS_OUTPUT=$(realpath "$OUTPUT_ADJ" 2>/dev/null || readlink -f "$OUTPUT_ADJ")
+ABS_INPUT=$(realpath "$INPUT_CSV" 2>/dev/null || readlink -f "$INPUT_CSV")
+TEMP_SNAP=$(realpath "$(mktemp "$(pwd)/gbbs_stream_XXXXXX.txt")")
 trap 'echo "Cleaning up temporary stream file..."; rm -f "$TEMP_SNAP"' EXIT
 
-tail -n +2 "$INPUT_CSV" | tr ',' '\t' > "$TEMP_SNAP"
-bazel run \
-  --disk_cache= \
-  --repository_cache= \
-  --nocache_test_results \
-  --spawn_strategy=local \
-  --copt=-march=x86-64 \
-  //utils:snap_converter -- -s -i "$TEMP_SNAP" -o "$ABS_OUTPUT"
+tail -n +2 "$ABS_INPUT" | tr ',' '\t' > "$TEMP_SNAP"
+
+(
+  cd $GBBS_DIR
+  bazel run \
+    --disk_cache= \
+    --repository_cache= \
+    --nocache_test_results \
+    --spawn_strategy=local \
+    --copt=-march=x86-64 \
+    //utils:snap_converter -- -s -i "$TEMP_SNAP" -o "$ABS_OUTPUT"
+)
 
 echo "Done! Successfully generated $OUTPUT_ADJ"
