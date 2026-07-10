@@ -1,6 +1,8 @@
+input
 input/
 slurm/.pipeline
 
+**/output
 **/output/
 **/target/
 
