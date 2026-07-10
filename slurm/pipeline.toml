@@ -1,6 +1,6 @@
 [defaults.slurm]
-cpus = 1
-mem  = "16GB"
+cpus = 16
+mem  = "128GB"
 time = "4:00:00"
 partition = "secondary"
 
@@ -29,6 +29,7 @@ mkdir -p ${output}
 """
 
 [recipe.gbbs-format]
+array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["build"]
 
@@ -42,10 +43,11 @@ mkdir -p ${output}
   ${root}/src/utilities/csv2gbbs.sh  \
     ${input}/${dataset}.csv \
     ${input}/${dataset}.gbbs.adj \
-  1> ${stdout} 2> ${stderr} 
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
 [recipe.pkc-format]
+array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["build"]
 
@@ -59,10 +61,11 @@ mkdir -p ${output}
   ${root}/src/utilities/csv2pkc.sh  \
     ${input}/${dataset}.csv \
     ${input}/${dataset}.pkc.adj \
-  1> ${stdout} 2> ${stderr} 
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
 [recipe.csr-format]
+array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["build"]
 
@@ -76,7 +79,7 @@ mkdir -p ${output}
   uv run --project ${root}/src/utilities ${root}/src/utilities/csv2csr.py  \
     ${input}/${dataset}.csv \
     ${input}/${dataset} \
-  1> ${stdout} 2> ${stderr} 
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
 /usr/bin/time -v -a -o ${timing} \
   uv run --project ${root}/src/utilities ${root}/src/utilities/pq2pf.py  \
     ${input}/${dataset}.indptr.parquet \
@@ -85,6 +88,7 @@ mkdir -p ${output}
 """
 
 [recipe.lbug-format]
+array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["build"]
 
@@ -99,10 +103,11 @@ mkdir -p ${output}
     ${input}/${dataset}.csv \
     ${input}/${dataset}.lbug \
     --no-symmetrize \
-  1> ${stdout} 2> ${stderr} 
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
 [recipe.gbbs-core-decomp]
+array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["gbbs-format(dataset=${dataset})"]
 
@@ -116,10 +121,11 @@ mkdir -p ${output}
   ${root}/src/gbbs-core-decomposition/bazel-bin/benchmarks/KCore/JulienneDBS17/KCore_main -s -rounds 1 \
     -o ${output}/${dataset}.gbbs.cores.csv \
     ${input}/${dataset}.gbbs.adj \
-  1> ${stdout} 2> ${stderr} 
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
 [recipe.ucr-core-decomp]
+array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["gbbs-format(dataset=${dataset})"]
 
@@ -134,10 +140,11 @@ mkdir -p ${output}
     -i ${input}/${dataset}.gbbs.adj \
     -o ${output}/${dataset}.ucr.cores.csv \
     -l ${stdout} \
-  1> ${stdout} 2> ${stderr} 
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
 [recipe.pkc-core-decomp]
+array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["pkc-format(dataset=${dataset})"]
 
@@ -151,10 +158,11 @@ mkdir -p ${output}
   ${root}/src/pkc-core-decomposition/pkc.exe \
     ${input}/${dataset}.pkc.adj \
     ${output}/${dataset}.pkc.cores.csv \
-  1> ${stdout} 2> ${stderr} 
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
 [recipe.lbug-core-decomp]
+array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["csr-format(dataset=${dataset})"]
 
@@ -169,10 +177,11 @@ mkdir -p ${output}
     ${input}/${dataset}.lbug.indptr.parquet \
     ${input}/${dataset}.lbug.indices.parquet \
     ${output}/${dataset}.lbug.cores.csv \
-  1> ${stdout} 2> ${stderr} 
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
 [recipe.nk-core-decomp]
+array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["csr-format(dataset=${dataset})"]
 
@@ -186,10 +195,11 @@ mkdir -p ${output}
   uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/main.py \
     --edgelist ${input}/${dataset}.csv \
     --output ${output}/${dataset}.nk.cores.csv \
-  1> ${stdout} 2> ${stderr} 
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
 [recipe.network-stats]
+array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["csr-format(dataset=${dataset})"]
 
@@ -202,5 +212,22 @@ mkdir -p ${output}
 /usr/bin/time -v -a -o ${timing} \
   uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/network-stats.py \
     --edgelist ${input}/${dataset}.csv \
-  1> ${stdout} 2> ${stderr} 
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
+"""
+
+[recipe.centrality]
+params  = { dataset = ["cen"] }
+deps    = ["build"]
+
+stdout  = "${output}/${dataset}.centrality.out"
+stderr  = "${output}/${dataset}.centrality.err"
+timing  = "${output}/${dataset}.centrality.resources"
+
+command = """
+mkdir -p ${output}
+/usr/bin/time -v -a -o ${timing} \
+  uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/centrality.py \
+    --edgelist ${input}/${dataset}.csv \
+    --output ${input}/${dataset}.centrality.csv \
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
