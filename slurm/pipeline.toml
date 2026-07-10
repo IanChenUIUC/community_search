@@ -29,7 +29,7 @@ mkdir -p ${output}
 """
 
 [recipe.gbbs-format]
-params  = { dataset = ["dnc"] }
+params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["build"]
 
 stdout  = "${output}/${dataset}.gbbs-format.out"
@@ -46,7 +46,7 @@ mkdir -p ${output}
 """
 
 [recipe.pkc-format]
-params  = { dataset = ["dnc"] }
+params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["build"]
 
 stdout  = "${output}/${dataset}.pkc-format.out"
@@ -63,7 +63,7 @@ mkdir -p ${output}
 """
 
 [recipe.csr-format]
-params  = { dataset = ["dnc"] }
+params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["build"]
 
 stdout  = "${output}/${dataset}.csr-format.out"
@@ -85,7 +85,7 @@ mkdir -p ${output}
 """
 
 [recipe.lbug-format]
-params  = { dataset = ["dnc"] }
+params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["build"]
 
 stdout  = "${output}/${dataset}.lbug-format.out"
@@ -103,7 +103,7 @@ mkdir -p ${output}
 """
 
 [recipe.gbbs-core-decomp]
-params  = { dataset = ["dnc"] }
+params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["gbbs-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}.gbbs-core-decomp.out"
@@ -120,7 +120,7 @@ mkdir -p ${output}
 """
 
 [recipe.ucr-core-decomp]
-params  = { dataset = ["dnc"] }
+params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["gbbs-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}.ucr-core-decomp.out"
@@ -138,7 +138,7 @@ mkdir -p ${output}
 """
 
 [recipe.pkc-core-decomp]
-params  = { dataset = ["dnc"] }
+params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["pkc-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}.pkc-core-decomp.out"
@@ -155,7 +155,7 @@ mkdir -p ${output}
 """
 
 [recipe.lbug-core-decomp]
-params  = { dataset = ["dnc"] }
+params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["csr-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}.lbug-core-decomp.out"
@@ -173,7 +173,7 @@ mkdir -p ${output}
 """
 
 [recipe.nk-core-decomp]
-params  = { dataset = ["dnc"] }
+params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["csr-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}.nk-core-decomp.out"
@@ -190,7 +190,7 @@ mkdir -p ${output}
 """
 
 [recipe.network-stats]
-params  = { dataset = ["dnc"] }
+params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["csr-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}.network-stats.out"

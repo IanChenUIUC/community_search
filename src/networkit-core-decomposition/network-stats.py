@@ -8,6 +8,7 @@ import networkit as nk
 @click.option("--edgelist", required=True, type=click.Path(exists=True))
 def stats(edgelist):
     graph = nk.graphio.EdgeListReader(",", 0, "s", continuous=True).read(edgelist)
+    print(f"n = {graph.numberOfNodes()}, m = {graph.numberOfEdges()}")
 
     lcc = nk.centrality.LocalClusteringCoefficient(graph)
     scores = np.mean(lcc.run().scores())
