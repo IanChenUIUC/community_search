@@ -1,0 +1,16 @@
+[project]
+name = "ours-icebug-commsearch"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "click>=8.4.2",
+    "icebug",
+    "numpy>=2.5.1",
+    "pandas>=3.0.3",
+    "polars[rt64]>=1.42.1",
+]
+
+[tool.uv.sources]
+icebug = { git = "https://github.com/IanChenUIUC/icebug", branch = "feature/kcore-commsearch" }

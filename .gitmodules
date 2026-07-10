@@ -1,9 +1,6 @@
 [submodule "src/pkc-core-decomposition"]
 	path = src/pkc-core-decomposition
 	url = https://github.com/IanChenUIUC/PKC
-[submodule "src/icebug"]
-	path = src/icebug
-	url = https://github.com/IanChenUIUC/icebug
 [submodule "src/gbbs-core-decomposition"]
 	path = src/gbbs-core-decomposition
 	url = https://github.com/IanChenUIUC/gbbs
