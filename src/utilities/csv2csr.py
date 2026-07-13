@@ -16,6 +16,7 @@ def main(input_csv, output_csr, symmetrize=True) -> None:
     input_opts.skip_rows = 1
     input_opts.sep = ","
     input_opts.directed = not symmetrize
+    input_opts.sort_neighbors = True
     output_opts = fmt.ParseOptions()
     output_opts.use_u64_indices = True
     graph = fmt.GraphDescriptor(input_csv, input_fmt, input_opts)

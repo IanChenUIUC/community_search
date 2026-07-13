@@ -7,8 +7,8 @@ import networkit as nk
 
 
 @click.command()
-@click.option("--edgelist", required=True, type=click.Path(exists=True))
-@click.option("--output", required=True, type=click.Path(exists=True))
+@click.option("--edgelist", required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option("--output", required=True, type=click.Path(dir_okay=False))
 def stats(edgelist, output):
     graph = nk.graphio.EdgeListReader(",", 0, "s", continuous=True).read(edgelist)
 
