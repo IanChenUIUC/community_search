@@ -8,13 +8,13 @@ from graph_tool.collection import ns
 # Networks to fetch.
 # ---------------------------------------------------------------------------
 NETWORKS = [
-    "soc_net_comms/friendster",
-    "twitter_social",
-    "dbpedia_link",
-    "microsoft_concept",
-    "wikipedia_link/en",
-    "bitcoin",
-    "livejournal",
+    ("soc_net_comms/friendster", "friendster"),
+    ("twitter_social", "twitter_social"),
+    ("dbpedia_link", "dbpedia_link"),
+    ("microsoft_concept", "microsoft_concept"),
+    ("wikipedia_link/en", "wikipedia_link"),
+    ("bitcoin", "bitcoin"),
+    ("livejournal", "livejournal"),
 ]
 
 OUTPUT_DIR = "../input"
@@ -35,21 +35,20 @@ def write_csv(E, path):
     pd.DataFrame(E, columns=["source", "target"]).to_csv(path, index=False)
 
 
-def process(name):
+def process(name, path):
     print(f"[{name}] downloading...")
     g = ns[name]
 
     E, n_nodes = clean_edges(g)
 
-    out = os.path.join(OUTPUT_DIR, f"{name.replace('/', '_')}.csv")
-    write_csv(E, out)
-    print(f"[{name}] wrote {len(E)} edges, {n_nodes} nodes -> {out}")
+    write_csv(E, path)
+    print(f"[{name}] wrote {len(E)} edges, {n_nodes} nodes -> {path}")
 
 
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    for name in NETWORKS:
-        process(name)
+    for name, path in NETWORKS:
+        process(name, path)
 
 
 if __name__ == "__main__":

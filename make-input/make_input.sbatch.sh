@@ -15,3 +15,5 @@ exec apptainer exec "$CONTAINER" bash -c "
   source .venv/bin/activate
   python netzschleuder.py
 "
+
+echo "done"
