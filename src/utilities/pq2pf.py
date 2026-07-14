@@ -20,6 +20,7 @@ for path in sys.argv[1:]:
 
     # pf.write_feather(table, out, compression="uncompressed", chunksize=table.num_rows)
 
+    opts = pa.ipc.IpcWriteOptions(allow_64bit=True)
     with pa.OSFile(out, "wb") as sink:
-        with pa.ipc.new_file(sink, table.schema) as writer:
+        with pa.ipc.new_file(sink, table.schema, options=opts) as writer:
             writer.write_table(table)
