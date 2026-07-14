@@ -18,7 +18,7 @@ timing  = "${output}/build.resources"
 command = """
 mkdir -p ${input}
 mkdir -p ${output}
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} bash -c "
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- bash -c "
   cd ${root}/src/gbbs-core-decomposition && bazel build //...
   cd ${root}/src/ucrparlay-core-decomposition/KCore && make
   cd ${root}/src/pkc-core-decomposition && make
@@ -40,7 +40,7 @@ timing  = "${output}/${dataset}/gbbs-format/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/gbbs-format
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} \
   ${root}/src/utilities/csv2gbbs.sh  \
     ${input}/${dataset}.csv \
     ${input}/${dataset}.gbbs.adj \
@@ -58,7 +58,7 @@ timing  = "${output}/${dataset}/pkc-format/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/pkc-format
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} \
   ${root}/src/utilities/csv2pkc.sh  \
     ${input}/${dataset}.csv \
     ${input}/${dataset}.pkc.adj \
@@ -76,12 +76,12 @@ timing  = "${output}/${dataset}/csr-format/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/csr-format
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/utilities ${root}/src/utilities/csv2csr.py  \
     ${input}/${dataset}.csv \
     ${input}/${dataset} \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/utilities ${root}/src/utilities/pq2pf.py  \
     ${input}/${dataset}.indptr.parquet \
     ${input}/${dataset}.indices.parquet \
@@ -99,7 +99,7 @@ timing  = "${output}/${dataset}/lbug-format/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/lbug-format
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/utilities ${root}/src/utilities/csv2csr.py  \
     ${input}/${dataset}.csv \
     ${input}/${dataset}.lbug \
@@ -118,7 +118,7 @@ timing  = "${output}/${dataset}/gbbs-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/gbbs-core-decomp
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} \
   ${root}/src/gbbs-core-decomposition/bazel-bin/benchmarks/KCore/JulienneDBS17/KCore_main -s -rounds 1 \
     -o ${output}/${dataset}/gbbs-core-decomp/cores.csv \
     ${input}/${dataset}.gbbs.adj \
@@ -136,7 +136,7 @@ timing  = "${output}/${dataset}/ucr-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/ucr-core-decomp
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} \
   ${root}/src/ucrparlay-core-decomposition/KCore/kcore -s \
     -i ${input}/${dataset}.gbbs.adj \
     -o ${output}/${dataset}/ucr-core-decomp/cores.csv \
@@ -155,7 +155,7 @@ timing  = "${output}/${dataset}/pkc-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/pkc-core-decomp
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} \
   ${root}/src/pkc-core-decomposition/pkc.exe \
     ${input}/${dataset}.pkc.adj \
     ${output}/${dataset}/pkc-core-decomp/cores.csv \
@@ -173,7 +173,7 @@ timing  = "${output}/${dataset}/lbug-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/lbug-core-decomp
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/lbug-core-decomposition ${root}/src/lbug-core-decomposition/main.py \
     ${input}/${dataset}.lbug.indptr.parquet \
     ${input}/${dataset}.lbug.indices.parquet \
@@ -192,7 +192,7 @@ timing  = "${output}/${dataset}/nk-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/nk-core-decomp
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/main.py \
     --edgelist ${input}/${dataset}.csv \
     --output ${output}/${dataset}/nk-core-decomp/cores.csv \
@@ -210,7 +210,7 @@ timing  = "${output}/${dataset}/ib-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/ib-core-decomp
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/ours-icebug-commsearch ${root}/src/ours-icebug-commsearch/core_decomposition.py \
     ${input}/${dataset}.indptr.feather \
     ${input}/${dataset}.indices.feather \
@@ -229,7 +229,7 @@ timing  = "${output}/${dataset}/network-stats/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/network-stats
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/network-stats.py \
     --edgelist ${input}/${dataset}.csv \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
@@ -245,7 +245,7 @@ timing  = "${output}/${dataset}/centrality/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/centrality
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/centrality.py \
     --edgelist ${input}/${dataset}.csv \
     --output ${output}/${dataset}/centrality/centrality.csv \
@@ -275,7 +275,7 @@ mkdir -p ${output}/${dataset}/icebug-shell-struct
 export LD_LIBRARY_PATH=$(
     uv run --project ${root}/src/ours-icebug-commsearch python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
   ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/ours-icebug-commsearch ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
     ${input}/${dataset}.indptr.feather \
     ${input}/${dataset}.indices.feather \
