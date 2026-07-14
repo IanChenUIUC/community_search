@@ -2,6 +2,9 @@ input
 input/
 slurm/.pipeline
 
+analysis/*.csv
+analysis/*.pdf
+
 **/output
 **/output/
 **/target/
