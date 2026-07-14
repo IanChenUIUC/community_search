@@ -216,7 +216,7 @@ mkdir -p ${output}
 """
 
 [recipe.centrality]
-params  = { dataset = ["cen"] }
+params  = { dataset = ["cen", "abm14"] }
 deps    = ["build"]
 
 stdout  = "${output}/${dataset}.centrality.out"
@@ -228,6 +228,37 @@ mkdir -p ${output}
 /usr/bin/time -v -a -o ${timing} \
   uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/centrality.py \
     --edgelist ${input}/${dataset}.csv \
-    --output ${input}/${dataset}.centrality.csv \
+    --output ${output}/${dataset}.centrality.csv \
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
+"""
+
+[recipe.icebug-shell-struct]
+params  = [
+  { dataset = "abm14", slurm = { cpus = 16, mem = "64GB" } },
+  { dataset = "bitcoin", slurm = { cpus = 16, mem = "64GB" } },
+  { dataset = "cen", slurm = { cpus = 16, mem = "64GB" } },
+  { dataset = "dbpedia_link", slurm = { cpus = 16, mem = "64GB" } },
+  { dataset = "friendster", slurm = { cpus = 16, mem = "64GB" } },
+  { dataset = "livejournal", slurm = { cpus = 16, mem = "64GB" } },
+  { dataset = "microsoft_concept", slurm = { cpus = 16, mem = "64GB" } },
+  { dataset = "twitter_social", slurm = { cpus = 16, mem = "256GB" } },
+  { dataset = "wikipedia_link", slurm = { cpus = 16, mem = "256GB" } },
+]
+deps    = ["csr-format(dataset=${dataset})"]
+
+stdout  = "${output}/${dataset}.icebug-shell-struct.out"
+stderr  = "${output}/${dataset}.icebug-shell-struct.err"
+timing  = "${output}/${dataset}.icebug-shell-struct.resources"
+
+command = """
+mkdir -p ${output}
+export LD_LIBRARY_PATH=$(
+    uv run --project ${root}/src/ours-icebug-commsearch python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+  ):$LD_LIBRARY_PATH
+/usr/bin/time -v -a -o ${timing} \
+  uv run --project ${root}/src/ours-icebug-commsearch ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}.icebug-shell \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """

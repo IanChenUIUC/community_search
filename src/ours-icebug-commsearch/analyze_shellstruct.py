@@ -35,8 +35,6 @@ def subtree_sizes(tree, root, sizes):
 @click.argument("tree_path", type=click.Path(exists=True, dir_okay=False))
 @click.argument("output_path", type=click.Path(dir_okay=False))
 def main(components_path, tree_path, output_path):
-    # note: currently shellstruct is bugged to write arrow IPC files
-    # instead of parquet files, even though the file extensions are .parquet
     tree_table = pf.read_table(tree_path)
     components_table = pf.read_table(components_path)
 

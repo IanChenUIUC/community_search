@@ -32,11 +32,11 @@ def main(indptr_path, indices_path, shell_base_path):
     graph = nk.Graph.fromCSR(n, directed=False, out_indices=indices, out_indptr=indptr)
 
     shell = nk.scd.ShellStruct(graph)
-    # shell.load("shell.components.parquet", "shell.tree.parquet")
+    # shell.load("shell.components.feather", "shell.tree.feather")
     shell.build()
 
-    components = pathlib.Path(shell_base_path).with_suffix(".components.parquet")
-    tree = pathlib.Path(shell_base_path).with_suffix(".tree.parquet")
+    components = pathlib.Path(shell_base_path).with_suffix(".components.feather")
+    tree = pathlib.Path(shell_base_path).with_suffix(".tree.feather")
     shell.save(components, tree)
 
 
