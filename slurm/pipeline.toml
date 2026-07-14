@@ -1,6 +1,6 @@
 [defaults.slurm]
 cpus = 16
-mem  = "128GB"
+mem  = "256GB"
 time = "4:00:00"
 partition = "secondary"
 
@@ -16,8 +16,9 @@ stderr  = "${output}/build.err"
 timing  = "${output}/build.resources"
 
 command = """
+mkdir -p ${input}
 mkdir -p ${output}
-/usr/bin/time -v -a -o ${timing} bash -c "
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} bash -c "
   cd ${root}/src/gbbs-core-decomposition && bazel build //...
   cd ${root}/src/ucrparlay-core-decomposition/KCore && make
   cd ${root}/src/pkc-core-decomposition && make
@@ -33,13 +34,13 @@ array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["build"]
 
-stdout  = "${output}/${dataset}.gbbs-format.out"
-stderr  = "${output}/${dataset}.gbbs-format.err"
-timing  = "${output}/${dataset}.gbbs-format.resources"
+stdout  = "${output}/${dataset}/gbbs-format/stdout.txt"
+stderr  = "${output}/${dataset}/gbbs-format/stderr.txt"
+timing  = "${output}/${dataset}/gbbs-format/timing.txt"
 
 command = """
-mkdir -p ${output}
-/usr/bin/time -v -a -o ${timing} \
+mkdir -p ${output}/${dataset}/gbbs-format
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
   ${root}/src/utilities/csv2gbbs.sh  \
     ${input}/${dataset}.csv \
     ${input}/${dataset}.gbbs.adj \
@@ -51,13 +52,13 @@ array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["build"]
 
-stdout  = "${output}/${dataset}.pkc-format.out"
-stderr  = "${output}/${dataset}.pkc-format.err"
-timing  = "${output}/${dataset}.pkc-format.resources"
+stdout  = "${output}/${dataset}/pkc-format/stdout.txt"
+stderr  = "${output}/${dataset}/pkc-format/stderr.txt"
+timing  = "${output}/${dataset}/pkc-format/timing.txt"
 
 command = """
-mkdir -p ${output}
-/usr/bin/time -v -a -o ${timing} \
+mkdir -p ${output}/${dataset}/pkc-format
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
   ${root}/src/utilities/csv2pkc.sh  \
     ${input}/${dataset}.csv \
     ${input}/${dataset}.pkc.adj \
@@ -69,18 +70,18 @@ array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["build"]
 
-stdout  = "${output}/${dataset}.csr-format.out"
-stderr  = "${output}/${dataset}.csr-format.err"
-timing  = "${output}/${dataset}.csr-format.resources"
+stdout  = "${output}/${dataset}/csr-format/stdout.txt"
+stderr  = "${output}/${dataset}/csr-format/stderr.txt"
+timing  = "${output}/${dataset}/csr-format/timing.txt"
 
 command = """
-mkdir -p ${output}
-/usr/bin/time -v -a -o ${timing} \
+mkdir -p ${output}/${dataset}/csr-format
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/utilities ${root}/src/utilities/csv2csr.py  \
     ${input}/${dataset}.csv \
     ${input}/${dataset} \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
-/usr/bin/time -v -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/utilities ${root}/src/utilities/pq2pf.py  \
     ${input}/${dataset}.indptr.parquet \
     ${input}/${dataset}.indices.parquet \
@@ -92,13 +93,13 @@ array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["build"]
 
-stdout  = "${output}/${dataset}.lbug-format.out"
-stderr  = "${output}/${dataset}.lbug-format.err"
-timing  = "${output}/${dataset}.lbug-format.resources"
+stdout  = "${output}/${dataset}/lbug-format/stdout.txt"
+stderr  = "${output}/${dataset}/lbug-format/stderr.txt"
+timing  = "${output}/${dataset}/lbug-format/timing.txt"
 
 command = """
-mkdir -p ${output}
-/usr/bin/time -v -a -o ${timing} \
+mkdir -p ${output}/${dataset}/lbug-format
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/utilities ${root}/src/utilities/csv2csr.py  \
     ${input}/${dataset}.csv \
     ${input}/${dataset}.lbug \
@@ -111,15 +112,15 @@ array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["gbbs-format(dataset=${dataset})"]
 
-stdout  = "${output}/${dataset}.gbbs-core-decomp.out"
-stderr  = "${output}/${dataset}.gbbs-core-decomp.err"
-timing  = "${output}/${dataset}.gbbs-core-decomp.resources"
+stdout  = "${output}/${dataset}/gbbs-core-decomp/stdout.txt"
+stderr  = "${output}/${dataset}/gbbs-core-decomp/stderr.txt"
+timing  = "${output}/${dataset}/gbbs-core-decomp/timing.txt"
 
 command = """
-mkdir -p ${output}
-/usr/bin/time -v -a -o ${timing} \
+mkdir -p ${output}/${dataset}/gbbs-core-decomp
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
   ${root}/src/gbbs-core-decomposition/bazel-bin/benchmarks/KCore/JulienneDBS17/KCore_main -s -rounds 1 \
-    -o ${output}/${dataset}.gbbs.cores.csv \
+    -o ${output}/${dataset}/gbbs-core-decomp/cores.csv \
     ${input}/${dataset}.gbbs.adj \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
@@ -129,16 +130,16 @@ array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["gbbs-format(dataset=${dataset})"]
 
-stdout  = "${output}/${dataset}.ucr-core-decomp.out"
-stderr  = "${output}/${dataset}.ucr-core-decomp.err"
-timing  = "${output}/${dataset}.ucr-core-decomp.resources"
+stdout  = "${output}/${dataset}/ucr-core-decomp/stdout.txt"
+stderr  = "${output}/${dataset}/ucr-core-decomp/stderr.txt"
+timing  = "${output}/${dataset}/ucr-core-decomp/timing.txt"
 
 command = """
-mkdir -p ${output}
-/usr/bin/time -v -a -o ${timing} \
+mkdir -p ${output}/${dataset}/ucr-core-decomp
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
   ${root}/src/ucrparlay-core-decomposition/KCore/kcore -s \
     -i ${input}/${dataset}.gbbs.adj \
-    -o ${output}/${dataset}.ucr.cores.csv \
+    -o ${output}/${dataset}/ucr-core-decomp/cores.csv \
     -l ${stdout} \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
@@ -148,16 +149,16 @@ array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["pkc-format(dataset=${dataset})"]
 
-stdout  = "${output}/${dataset}.pkc-core-decomp.out"
-stderr  = "${output}/${dataset}.pkc-core-decomp.err"
-timing  = "${output}/${dataset}.pkc-core-decomp.resources"
+stdout  = "${output}/${dataset}/pkc-core-decomp/stdout.txt"
+stderr  = "${output}/${dataset}/pkc-core-decomp/stderr.txt"
+timing  = "${output}/${dataset}/pkc-core-decomp/timing.txt"
 
 command = """
-mkdir -p ${output}
-/usr/bin/time -v -a -o ${timing} \
+mkdir -p ${output}/${dataset}/pkc-core-decomp
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
   ${root}/src/pkc-core-decomposition/pkc.exe \
     ${input}/${dataset}.pkc.adj \
-    ${output}/${dataset}.pkc.cores.csv \
+    ${output}/${dataset}/pkc-core-decomp/cores.csv \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
@@ -166,35 +167,54 @@ array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["csr-format(dataset=${dataset})"]
 
-stdout  = "${output}/${dataset}.lbug-core-decomp.out"
-stderr  = "${output}/${dataset}.lbug-core-decomp.err"
-timing  = "${output}/${dataset}.lbug-core-decomp.resources"
+stdout  = "${output}/${dataset}/lbug-core-decomp/stdout.txt"
+stderr  = "${output}/${dataset}/lbug-core-decomp/stderr.txt"
+timing  = "${output}/${dataset}/lbug-core-decomp/timing.txt"
 
 command = """
-mkdir -p ${output}
-/usr/bin/time -v -a -o ${timing} \
+mkdir -p ${output}/${dataset}/lbug-core-decomp
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/lbug-core-decomposition ${root}/src/lbug-core-decomposition/main.py \
     ${input}/${dataset}.lbug.indptr.parquet \
     ${input}/${dataset}.lbug.indices.parquet \
-    ${output}/${dataset}.lbug.cores.csv \
+    ${output}/${dataset}/lbug-core-decomp/cores.csv \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
 [recipe.nk-core-decomp]
 array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["csr-format(dataset=${dataset})"]
+deps    = ["build"]
 
-stdout  = "${output}/${dataset}.nk-core-decomp.out"
-stderr  = "${output}/${dataset}.nk-core-decomp.err"
-timing  = "${output}/${dataset}.nk-core-decomp.resources"
+stdout  = "${output}/${dataset}/nk-core-decomp/stdout.txt"
+stderr  = "${output}/${dataset}/nk-core-decomp/stderr.txt"
+timing  = "${output}/${dataset}/nk-core-decomp/timing.txt"
 
 command = """
-mkdir -p ${output}
-/usr/bin/time -v -a -o ${timing} \
+mkdir -p ${output}/${dataset}/nk-core-decomp
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/main.py \
     --edgelist ${input}/${dataset}.csv \
-    --output ${output}/${dataset}.nk.cores.csv \
+    --output ${output}/${dataset}/nk-core-decomp/cores.csv \
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
+"""
+
+[recipe.ib-core-decomp]
+array   = true
+params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+deps    = ["csr-format(dataset=${dataset})"]
+
+stdout  = "${output}/${dataset}/ib-core-decomp/stdout.txt"
+stderr  = "${output}/${dataset}/ib-core-decomp/stderr.txt"
+timing  = "${output}/${dataset}/ib-core-decomp/timing.txt"
+
+command = """
+mkdir -p ${output}/${dataset}/ib-core-decomp
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
+  uv run --project ${root}/src/ours-icebug-commsearch ${root}/src/ours-icebug-commsearch/core_decomposition.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}/ib-core-decomp/cores.csv
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
@@ -203,13 +223,13 @@ array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["csr-format(dataset=${dataset})"]
 
-stdout  = "${output}/${dataset}.network-stats.out"
-stderr  = "${output}/${dataset}.network-stats.err"
-timing  = "${output}/${dataset}.network-stats.resources"
+stdout  = "${output}/${dataset}/network-stats/stdout.txt"
+stderr  = "${output}/${dataset}/network-stats/stderr.txt"
+timing  = "${output}/${dataset}/network-stats/timing.txt"
 
 command = """
-mkdir -p ${output}
-/usr/bin/time -v -a -o ${timing} \
+mkdir -p ${output}/${dataset}/network-stats
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/network-stats.py \
     --edgelist ${input}/${dataset}.csv \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
@@ -219,16 +239,16 @@ mkdir -p ${output}
 params  = { dataset = ["cen", "abm14"] }
 deps    = ["build"]
 
-stdout  = "${output}/${dataset}.centrality.out"
-stderr  = "${output}/${dataset}.centrality.err"
-timing  = "${output}/${dataset}.centrality.resources"
+stdout  = "${output}/${dataset}/centrality/stdout.txt"
+stderr  = "${output}/${dataset}/centrality/stderr.txt"
+timing  = "${output}/${dataset}/centrality/timing.txt"
 
 command = """
-mkdir -p ${output}
-/usr/bin/time -v -a -o ${timing} \
+mkdir -p ${output}/${dataset}/centrality
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/centrality.py \
     --edgelist ${input}/${dataset}.csv \
-    --output ${output}/${dataset}.centrality.csv \
+    --output ${output}/${dataset}/centrality/centrality.csv \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
@@ -246,19 +266,107 @@ params  = [
 ]
 deps    = ["csr-format(dataset=${dataset})"]
 
-stdout  = "${output}/${dataset}.icebug-shell-struct.out"
-stderr  = "${output}/${dataset}.icebug-shell-struct.err"
-timing  = "${output}/${dataset}.icebug-shell-struct.resources"
+stdout  = "${output}/${dataset}/icebug-shell-struct/stdout.txt"
+stderr  = "${output}/${dataset}/icebug-shell-struct/stderr.txt"
+timing  = "${output}/${dataset}/icebug-shell-struct/timing.txt"
 
 command = """
-mkdir -p ${output}
+mkdir -p ${output}/${dataset}/icebug-shell-struct
 export LD_LIBRARY_PATH=$(
     uv run --project ${root}/src/ours-icebug-commsearch python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
   ):$LD_LIBRARY_PATH
-/usr/bin/time -v -a -o ${timing} \
+uv run --project ${root}/src/utilities ${root}/src/utilies/mytime.py -a -o ${timing} \
   uv run --project ${root}/src/ours-icebug-commsearch ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
     ${input}/${dataset}.indptr.feather \
     ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}.icebug-shell \
+    ${output}/${dataset}/icebug-shell-struct/shell \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
+"""
+
+[recipe.cold-warm]
+params  = { dataset = ["cen", "abm14"] }
+
+stdout  = "${output}/${dataset}/cold-warm/stdout.txt"
+stderr  = "${output}/${dataset}/cold-warm/stderr.txt"
+timing  = "${output}/${dataset}/cold-warm/timing"
+
+command = """
+mkdir -p ${output}/${dataset}/cold-warm
+export LD_LIBRARY_PATH=$(
+    uv run --project ${root}/src/ours-icebug-commsearch python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+  ):$LD_LIBRARY_PATH
+
+## cold coreness
+vmtouch -e ${input}/${dataset}.indptr.feather
+vmtouch -e ${input}/${dataset}.indices.feather
+uv run ${root}/src/utilities/mytime.py -o ${timing}-coldcores.txt \
+  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/coreness.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}/cold-warm/cores.csv \
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
+
+## cold query
+vmtouch -e ${input}/${dataset}.indptr.feather
+vmtouch -e ${input}/${dataset}.indices.feather
+uv run ${root}/src/utilities/mytime.py -o ${timing}-coldquery.txt \
+  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/query.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}/cold-warm/cores.csv \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+
+## simult coreness
+vmtouch -e ${input}/${dataset}.indptr.feather
+vmtouch -e ${input}/${dataset}.indices.feather
+uv run ${root}/src/utilities/mytime.py -o ${timing}-simult1coreness.txt \
+  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/coreness.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}/cold-warm/simult1-cores.csv \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr}) &
+uv run ${root}/src/utilities/mytime.py -o ${timing}-simult2coreness.txt \
+  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/coreness.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}/cold-warm/simult2-cores.csv \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr}) &
+wait
+
+## simult query
+vmtouch -e ${input}/${dataset}.indptr.feather
+vmtouch -e ${input}/${dataset}.indices.feather
+uv run ${root}/src/utilities/mytime.py -o ${timing}-simult1query.txt \
+  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/query.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}/cold-warm/cores.csv \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr}) &
+uv run ${root}/src/utilities/mytime.py -o ${timing}-simult2query.txt \
+  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/query.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}/cold-warm/cores.csv \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr}) &
+wait
+
+## warm coreness
+vmtouch -t ${input}/${dataset}.indptr.feather
+vmtouch -t ${input}/${dataset}.indices.feather
+uv run ${root}/src/utilities/mytime.py -o ${timing}-warmcoreness.txt \
+  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/coreness.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}/cold-warm/cores.csv \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+
+## warm query
+vmtouch -t ${input}/${dataset}.indptr.feather
+vmtouch -t ${input}/${dataset}.indices.feather
+uv run ${root}/src/utilities/mytime.py -o ${timing}-warmquery.txt \
+  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/query.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}/cold-warm/cores.csv \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
 """

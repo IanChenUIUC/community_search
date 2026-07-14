@@ -5,6 +5,10 @@ slurm/.pipeline
 analysis/*.csv
 analysis/*.pdf
 
+src/**/*.csv
+src/**/*.feather
+src/**/*.parquet
+
 **/output
 **/output/
 **/target/

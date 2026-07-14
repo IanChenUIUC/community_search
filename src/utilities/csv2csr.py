@@ -14,7 +14,7 @@ def main(input_csv, output_csr, symmetrize=True) -> None:
 
     input_opts = fmt.ParseOptions()
     input_opts.skip_rows = 1
-    input_opts.sep = ","
+    input_opts.sep = "\t" if input_csv.endswith(".tsv") else ","
     input_opts.directed = not symmetrize
     input_opts.sort_neighbors = True
     output_opts = fmt.ParseOptions()
