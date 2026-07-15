@@ -22,13 +22,7 @@ tail -n +2 "$ABS_INPUT" | tr ',' '\t' > "$TEMP_SNAP"
 
 (
   cd $GBBS_DIR
-  bazel run \
-    --disk_cache= \
-    --repository_cache= \
-    --nocache_test_results \
-    --spawn_strategy=local \
-    --copt=-march=x86-64 \
-    //utils:snap_converter -- -s -i "$TEMP_SNAP" -o "$ABS_OUTPUT"
+  ./bazel-bin/utils/snap_converter -s -i "$TEMP_SNAP" -o "$ABS_OUTPUT"
 )
 
 echo "Done! Successfully generated $OUTPUT_ADJ"

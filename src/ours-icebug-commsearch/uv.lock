@@ -82,7 +82,7 @@ wheels = [
 [[package]]
 name = "icebug"
 version = "12.9"
-source = { git = "https://github.com/IanChenUIUC/icebug?branch=feature%2Fkcore-commsearch#e464d89aba6c075facc01f84a49314f96a6156a6" }
+source = { git = "https://github.com/IanChenUIUC/icebug?branch=feature%2Fkcore-commsearch#88c157a2815ba6c15c608382f72686dbd415fed0" }
 dependencies = [
     { name = "cython" },
     { name = "duckdb" },
