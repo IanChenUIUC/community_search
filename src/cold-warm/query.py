@@ -39,7 +39,7 @@ def main(indptr_path, indices_path, coreness_path):
     cores = np.load(coreness_path)
 
     steiner = SteinerKCore(graph, cores)
-    queries = gen_queries(cores)
+    queries = [{int(x)} for x in gen_queries(cores)]
 
     nk.engineering.setNumberOfThreads(1)
 
