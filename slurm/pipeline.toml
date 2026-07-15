@@ -299,82 +299,12 @@ stderr  = "${output}/${dataset}/cold-warm/stderr.txt"
 timing  = "${output}/${dataset}/cold-warm/timing"
 
 command = """
-mkdir -p ${output}/${dataset}/cold-warm
-export LD_LIBRARY_PATH=$(
-    uv run --project ${root}/src/ours-icebug-commsearch python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-
-## cold coreness
-vmtouch -e ${input}/${dataset}.indptr.feather
-vmtouch -e ${input}/${dataset}.indices.feather
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-coldcores.txt -- \
-  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/coreness.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/cold-warm/cores.npy \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
-
-## cold query
-vmtouch -e ${input}/${dataset}.indptr.feather
-vmtouch -e ${input}/${dataset}.indices.feather
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-coldquery.txt -- \
-  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/cold-warm/cores.npy \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-
-## simult coreness
-vmtouch -e ${input}/${dataset}.indptr.feather
-vmtouch -e ${input}/${dataset}.indices.feather
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-simult1coreness.txt -- \
-  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/coreness.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/cold-warm/simult1-cores.npy \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr}) &
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-simult2coreness.txt -- \
-  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/coreness.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/cold-warm/simult2-cores.npy \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr}) &
-wait
-
-## simult query
-vmtouch -e ${input}/${dataset}.indptr.feather
-vmtouch -e ${input}/${dataset}.indices.feather
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-simult1query.txt -- \
-  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/cold-warm/cores.npy \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr}) &
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-simult2query.txt -- \
-  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/cold-warm/cores.npy \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr}) &
-wait
-
-## warm coreness
-vmtouch -t ${input}/${dataset}.indptr.feather
-vmtouch -t ${input}/${dataset}.indices.feather
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-warmcoreness.txt -- \
-  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/coreness.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/cold-warm/cores.npy \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-
-## warm query
-vmtouch -t ${input}/${dataset}.indptr.feather
-vmtouch -t ${input}/${dataset}.indices.feather
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-warmquery.txt -- \
-  uv run --project ${root}/src/cold-warm ${root}/src/cold-warm/query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/cold-warm/cores.npy \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+export root=${root}
+export input=${input}
+export output=${output}
+export dataset=${dataset}
+export stdout=${stdout}
+export stderr=${stderr}
+export timing=${timing}
+bash ${root}/src/cold-warm/run.sh
 """
