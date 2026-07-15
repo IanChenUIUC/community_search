@@ -21,9 +21,9 @@ def stats(edgelist):
     print(f"giant component: n = {giant_n} m = {giant_m}", flush=True)
     del cc
 
-    ed = nk.distance.EffectiveDiameter(giant, ratio=0.9)
-    print("effective diameter =", f"{ed.run().getEffectiveDiameter():.3f}", flush=True)
-    del ed
+    # ed = nk.distance.EffectiveDiameter(giant, ratio=0.9)
+    # print("effective diameter =", f"{ed.run().getEffectiveDiameter():.3f}", flush=True)
+    # del ed
 
 
 if __name__ == "__main__":

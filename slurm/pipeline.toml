@@ -225,8 +225,8 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
 # params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 params  = [
   { dataset = "abm14" }, { dataset = "bitcoin" }, { dataset = "cen" }, { dataset = "dbpedia_link" }, { dataset = "livejournal" }, { dataset = "microsoft_concept" }, { dataset = "wikipedia_link" },
-  { dataset = "friendster", slurm = { mem = "512GB" } },
-  { dataset = "twitter_social", slurm = { mem = "512GB" } },
+  { dataset = "friendster", slurm = { mem = "256GB" } },
+  { dataset = "twitter_social", slurm = { mem = "256GB" } },
 ]
 
 deps    = ["csr-format(dataset=${dataset})"]

@@ -1,5 +1,6 @@
 import sys
 import pathlib
+import time
 
 import click
 import numpy as np
@@ -31,7 +32,12 @@ def main(indptr_path, indices_path, output):
 
     n, m = len(indptr) - 1, len(indices) // 2
     graph = nk.Graph.fromCSR(n, directed=False, out_indices=indices, out_indptr=indptr)
+
+    start = time.perf_counter()
     scores = np.array(CoreDecomposition(graph).run().scores(), dtype=np.uint64)
+    end = time.perf_counter()
+    print(end - start)
+
     pathlib.Path(output).parent.mkdir(exist_ok=True, parents=True)
     np.save(output, scores)
 
