@@ -210,6 +210,9 @@ timing  = "${output}/${dataset}/ib-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/ib-core-decomp
+export LD_LIBRARY_PATH=$(
+    uv run --project ${root}/src/ours-icebug-commsearch python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+  ):$LD_LIBRARY_PATH
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
   uv run --project ${root}/src/ours-icebug-commsearch ${root}/src/ours-icebug-commsearch/core_decomposition.py \
     ${input}/${dataset}.indptr.feather \
@@ -219,8 +222,13 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
 """
 
 [recipe.network-stats]
-array   = true
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+params  = [
+  { dataset = "abm14" }, { dataset = "bitcoin" }, { dataset = "cen" }, { dataset = "dbpedia_link" }, { dataset = "livejournal" }, { dataset = "microsoft_concept" }, { dataset = "wikipedia_link" },
+  { dataset = "friendster", slurm = { mem = "512GB" } },
+  { dataset = "twitter_social", slurm = { mem = "512GB" } },
+]
+
 deps    = ["csr-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}/network-stats/stdout.txt"
