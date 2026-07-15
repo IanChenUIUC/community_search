@@ -36,7 +36,7 @@ def main(indptr_path, indices_path, coreness_path):
 
     n, m = len(indptr) - 1, len(indices) // 2
     graph = nk.Graph.fromCSR(n, directed=False, out_indices=indices, out_indptr=indptr)
-    cores = np.load(coreness_path, mmap_mode="r")
+    cores = np.load(coreness_path)
 
     steiner = SteinerKCore(graph, cores)
     queries = gen_queries(cores)
