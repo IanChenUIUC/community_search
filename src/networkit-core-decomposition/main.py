@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 
 import click
 import numpy as np
@@ -13,7 +14,12 @@ from networkit.centrality import CoreDecomposition
 @click.option("--output", required=True, type=click.Path())
 def coreness(graph, output):
     gr = nk.readGraph(graph, nk.Format.NetworkitBinary)
+
+    start = time.perf_counter()
     core = CoreDecomposition(gr).run()
+    end = time.perf_counter()
+
+    print(f"networkit core decomposition took: {end - start} seconds")
 
     nodes = np.arange(gr.numberOfNodes(), dtype=np.int32)
     scores = np.array(core.scores(), dtype=np.int32)

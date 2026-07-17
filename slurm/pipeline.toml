@@ -87,7 +87,7 @@ command = """
 mkdir -p ${output}/${dataset}/nk-format
 source ${root}/src/networkit-core-decomposition/.venv/bin/activate
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  ${root}/src/networkit-core-decomposition/csv2nk.py \
+  python3 ${root}/src/networkit-core-decomposition/csv2nk.py \
     --edgelist ${input}/${dataset}.csv \
     --output ${input}/${dataset}.nk.bin \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
@@ -111,7 +111,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
     ${input}/${dataset} \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  python3 ${root}/src/utilities/pq2pf.py -w 32\
+  python3 ${root}/src/utilities/pq2pf.py -w 32 \
     ${input}/${dataset}.indices.parquet \
   1> >(tee -a ${stdout}) 2> >(tee -a ${stderr}) 
 mv ${input}/${dataset}.indices.feather ${input}/${dataset}.indices32.feather
@@ -144,7 +144,8 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
 
 [recipe.gbbs-core-decomp]
 array   = true
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+params  = { dataset = ["abm14", "cen"] }
 deps    = ["gbbs-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}/gbbs-core-decomp/stdout.txt"
@@ -162,7 +163,8 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
 
 [recipe.ucr-core-decomp]
 array   = true
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+params  = { dataset = ["abm14", "cen"] }
 deps    = ["gbbs-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}/ucr-core-decomp/stdout.txt"
@@ -181,7 +183,8 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
 
 [recipe.pkc-core-decomp]
 array   = true
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+params  = { dataset = ["abm14", "cen"] }
 deps    = ["pkc-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}/pkc-core-decomp/stdout.txt"
@@ -219,7 +222,8 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
 
 [recipe.nk-core-decomp]
 array   = true
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+params  = { dataset = ["abm14", "cen"] }
 deps    = ["nk-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}/nk-core-decomp/stdout.txt"
@@ -238,7 +242,8 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
 
 [recipe.ib-core-decomp]
 array   = true
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+params  = { dataset = ["abm14", "cen"] }
 deps    = ["csr-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}/ib-core-decomp/stdout.txt"

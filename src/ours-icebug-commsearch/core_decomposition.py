@@ -1,5 +1,6 @@
 import sys
 import pathlib
+import time
 
 import click
 import networkit as nk
@@ -30,7 +31,11 @@ def main(indptr_path, indices_path, output):
 
     n, m = len(indptr) - 1, len(indices) // 2
     graph = nk.Graph.fromCSR(n, directed=False, out_indices=indices, out_indptr=indptr)
+
+    start = time.perf_counter()
     core = nk.centrality.CoreDecomposition(graph).run()
+    end = time.perf_counter()
+    print(f"icebug core decomposition took {end - start} seconds")
 
     nodes = np.arange(graph.numberOfNodes(), dtype=np.int32)
     scores = np.array(core.scores(), dtype=np.int32)
