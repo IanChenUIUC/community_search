@@ -14,7 +14,7 @@ import pyarrow.parquet as pq
 
 def _read_column(path: str, column: str) -> pa.Array:
     if path.endswith(".feather"):
-        return pf.read_table(path)[column].chunk(0)
+        return pf.read_table(path, memory_map=True)[column].chunk(0)
     elif path.endswith(".parquet"):
         return pq.read_table(path)[column].combine_chunks()
 

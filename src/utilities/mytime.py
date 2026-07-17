@@ -47,7 +47,7 @@ PATH_ONLY = click.Path(dir_okay=False, path_type=Path)
 
 
 @click.command()
-@click.option("-o", "--output", type=PATH_ONLY, default="-")
+@click.option("-o", "--output", type=PATH_ONLY)
 @click.option("-a", "--append", is_flag=True)
 @click.argument("cmd", nargs=-1, type=click.UNPROCESSED, required=False)
 def main(output, append, cmd):

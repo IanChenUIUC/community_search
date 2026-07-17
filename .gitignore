@@ -4,10 +4,13 @@ slurm/.pipeline
 
 analysis/*.csv
 analysis/*.pdf
+analysis/*.txt
 
 src/**/*.csv
 src/**/*.feather
 src/**/*.parquet
+
+!src/ours-python-commsearch/tests/data/*.feather
 
 **/output
 **/output/

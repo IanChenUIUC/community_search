@@ -1,5 +1,4 @@
 import pyarrow as pa
-import pyarrow.feather as pf
 import pyarrow.parquet as pq
 import sys
 
