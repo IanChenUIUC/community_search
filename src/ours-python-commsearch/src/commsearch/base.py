@@ -6,10 +6,40 @@ from typing import NamedTuple
 
 import numpy as np
 
+from .graph import NODE_DTYPE, OFFSET_DTYPE
+from .structures.csr import CSR
+
 
 class Community(NamedTuple):
     coreness: int
     vertices: np.ndarray
+
+
+def _flatten_queries(queries, dedup: bool):
+    """Flatten seed-vertex arrays into a query ``CSR`` (row q = query q's seeds)
+    for one njit call. ``dedup`` drops seeds repeated within a query (Steiner
+    counts distinct seeds per component); leave it off when the consumer is
+    duplicate-insensitive (ShellStruct's LCA over min/max Euler positions)."""
+    q_flat: list[int] = []
+    q_ptr = [0]
+    for q in queries:
+        ids = (int(x) for x in q)
+        q_flat.extend(dict.fromkeys(ids) if dedup else ids)
+        q_ptr.append(len(q_flat))
+    return CSR(
+        np.asarray(q_ptr, dtype=OFFSET_DTYPE), np.asarray(q_flat, dtype=NODE_DTYPE)
+    )
+
+
+def _assemble_communities(comm_id, comm_cor, member_arrays) -> list["Community"]:
+    """Build the per-query ``Community`` list from a kernel's
+    ``(comm_id, comm_cor, member_arrays)`` triple. Queries sharing a community
+    share ONE read-only ``vertices`` array — callers must not mutate/free it."""
+    vertices = []
+    for a in member_arrays:
+        a.setflags(write=False)
+        vertices.append(a)
+    return [Community(int(comm_cor[c]), vertices[c]) for c in comm_id.tolist()]
 
 
 class SelectiveCommunityDetector(ABC):

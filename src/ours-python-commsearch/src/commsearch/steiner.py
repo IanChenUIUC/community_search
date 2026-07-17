@@ -7,47 +7,51 @@ import numba as nb
 import numpy as np
 from numba import njit, uint32
 from numba.core import types
-from numba.typed import Dict, List
+from numba.typed import Dict
 
-from .base import Community, SelectiveCommunityDetector
-from .graph import NODE_DTYPE, Graph, _read_column, _write_column
+from .base import (
+    Community,
+    SelectiveCommunityDetector,
+    _assemble_communities,
+    _flatten_queries,
+)
+from .graph import CORE_DTYPE, NODE_DTYPE, Graph, _read_column, _write_column
+from .structures.community import CommunityBuilder
+from .structures.csr import NB_CORE, NB_NODE
 from .structures.maxheap import make_maxheap
 from .structures.unionfind import SubsetUnionFind
 
-NB_NODE = nb.from_dtype(NODE_DTYPE)  # uint32
-_UNRESOLVED = np.iinfo(NODE_DTYPE).max  # comm_id sentinel for a query whose seeds never connect
+# comm_id sentinel for a query whose seeds never connect
+_NONE = np.iinfo(NODE_DTYPE).max
 
-_EdgeHeap = make_maxheap(uint32, nb.types.UniTuple(NB_NODE, 2))  # key=coreness, val=(u,v)
-_ReadyHeap = make_maxheap(uint32, uint32)  # key=coreness, val=qID
-_INNER = types.DictType(uint32, uint32)  # terminals value: qID -> seed count
-_MEMBERS = types.Array(NB_NODE, 1, "C")  # one community's vertices (a subset() output)
+_EdgeHeap = make_maxheap(NB_CORE, nb.types.UniTuple(NB_NODE, 2))  # coreness -> (u,w)
+_ReadyHeap = make_maxheap(NB_CORE, uint32)  # key=coreness, val=qID
+_QHIST = types.DictType(uint32, uint32)  # terminals value: qID -> seed count
 
 
 @njit(cache=True)
-def _steiner(indptr, indices, coreness, q_flat, q_ptr):
-    """Batched multi-set k-core community search. Returns
+def _steiner(gcsr, coreness, queries):
+    """Batched multi-set k-core community search over graph adjacency ``gcsr``,
+    with ``queries`` a CSR of per-query seed vertices. Returns
     ``(comm_id[Q], comm_cor[C], member_arrays)`` where ``member_arrays`` is a
     ``typed.List`` of ``C`` per-community vertex arrays; ``comm_id[i]`` is the
-    community index of query ``i``, or ``UINT32_MAX`` if its seeds never connect."""
-    n, Q = len(indptr) - 1, len(q_ptr) - 1
+    community index of query ``i``, or ``UINT32_MAX`` if its seeds never
+    connect."""
+    n, Q = gcsr.num_rows(), queries.num_rows()
     qlen = np.empty(Q, dtype=np.uint32)
     for i in range(Q):
-        qlen[i] = q_ptr[i + 1] - q_ptr[i]
+        qlen[i] = queries.degree(i)
 
     uf = SubsetUnionFind(n)
     visited = np.zeros(n, dtype=np.bool_)
-    resolved = np.zeros(Q, dtype=np.bool_)
-    comm_id = np.full(Q, _UNRESOLVED, dtype=NODE_DTYPE)
+    comm_id = np.full(Q, _NONE, dtype=NODE_DTYPE)
     edge_pq, ready_pq = _EdgeHeap(), _ReadyHeap()
-    terminals = Dict.empty(NB_NODE, _INNER)  # component-root -> (qID -> seed count)
-    member_arrays = List.empty_list(_MEMBERS)  # one array per emitted community
-    comm_cor = List.empty_list(uint32)
-    ncomm = np.zeros(1, dtype=np.uint32)
+    terminals = Dict.empty(NB_NODE, _QHIST)  # component-root -> (qID -> seed count)
+    builder = CommunityBuilder()
 
     def add_nbrs(v):
         cv = coreness[v]
-        for e in range(indptr[v], indptr[v + 1]):
-            w = indices[e]
+        for w in gcsr.neighbors(v):
             if not visited[w]:
                 cw = coreness[w]
                 edge_pq.push(cv if cv < cw else cw, (v, w))
@@ -59,7 +63,6 @@ def _steiner(indptr, indices, coreness, q_flat, q_ptr):
         cnt = uint32(d[q] + uint32(1)) if q in d else uint32(1)
         d[q] = cnt
         if cnt == qlen[q]:
-            resolved[q] = True
             ready_pq.push(coreness[v], q)
             d.pop(q)
 
@@ -74,7 +77,6 @@ def _steiner(indptr, indices, coreness, q_flat, q_ptr):
             for q in tv:
                 c = uint32(tu[q] + tv[q]) if q in tu else tv[q]
                 if c == qlen[q]:
-                    resolved[q] = True
                     ready_pq.push(k, q)
                     if q in tu:
                         tu.pop(q)
@@ -100,29 +102,24 @@ def _steiner(indptr, indices, coreness, q_flat, q_ptr):
             uf.merge(u, v)
 
     def finalize(k_next, exhausted):
-        # Emit a resolved query only once the edge-PQ's max drops BELOW its
-        # coreness: every edge with weight >= that coreness has been processed,
-        # so the community is maximal. (When exhausted, nothing is left, so all.)
-        curr = Dict.empty(NB_NODE, uint32)
+        # Emit a resolved query.
+        curr = Dict.empty(NB_NODE, NB_NODE)
         count = 0
         while len(ready_pq) > 0 and (exhausted or ready_pq.peek_key() > k_next):
             r_res, q = ready_pq.pop()
-            root = uf.find(q_flat[q_ptr[q]])
+            root = uf.find(queries.values[queries.indptr[q]])
             if root in curr:
                 comm_id[q] = curr[root]
             else:
-                member_arrays.append(uf.subset(root))
-                comm_cor.append(r_res)
-                curr[root] = ncomm[0]
-                comm_id[q] = ncomm[0]
-                ncomm[0] += 1
+                idx = builder.append(r_res, uf.subset(root))
+                curr[root] = idx
+                comm_id[q] = idx
             count += 1
         return count
 
     for q in range(Q):
         qi = uint32(q)
-        for j in range(q_ptr[q], q_ptr[q + 1]):
-            v = q_flat[j]
+        for v in queries.neighbors(q):
             seed(v, qi)
             if not visited[v]:
                 visited[v] = True
@@ -141,10 +138,7 @@ def _steiner(indptr, indices, coreness, q_flat, q_ptr):
         if exhausted or nresolved == Q:
             break
 
-    comm_cor_arr = np.empty(len(comm_cor), dtype=np.uint32)
-    for i in range(len(comm_cor)):
-        comm_cor_arr[i] = comm_cor[i]
-    return comm_id, comm_cor_arr, member_arrays
+    return comm_id, builder.coreness_array(), builder.members
 
 
 @dataclass
@@ -155,33 +149,16 @@ class SteinerKCore(SelectiveCommunityDetector):
     graph: Graph
     coreness: np.ndarray  # per-vertex coreness, len n
 
+    def __post_init__(self):
+        self.coreness = np.ascontiguousarray(self.coreness, dtype=CORE_DTYPE)
+
     def run(self, queries) -> list[Community]:
-        q_flat_list: list[int] = []
-        q_ptr = [0]
-        for q in queries:
-            q_flat_list.extend(dict.fromkeys(int(x) for x in q))
-            q_ptr.append(len(q_flat_list))
-
-        comm_id, comm_cor, member_arrays = _steiner(
-            np.ascontiguousarray(self.graph.indptr),
-            np.ascontiguousarray(self.graph.indices),
-            np.ascontiguousarray(self.coreness, dtype=NODE_DTYPE),
-            np.asarray(q_flat_list, dtype=NODE_DTYPE),
-            np.asarray(q_ptr, dtype=np.int64),
-        )
-
-        bad = np.nonzero(comm_id == _UNRESOLVED)[0]
+        q = _flatten_queries(queries, dedup=True)
+        comm_id, comm_cor, member_arrays = _steiner(self.graph.csr, self.coreness, q)
+        bad = np.nonzero(comm_id == _NONE)[0]
         if len(bad):
             raise ValueError(f"query {int(bad[0])} seeds are not connected")
-
-        # Queries in the same community share ONE vertices array (read-only):
-        # mutate/free at your own risk. Materialize to a Python list so repeated
-        # indexing yields the same object per community.
-        vertices = []
-        for a in member_arrays:
-            a.setflags(write=False)
-            vertices.append(a)
-        return [Community(int(comm_cor[c]), vertices[c]) for c in comm_id.tolist()]
+        return _assemble_communities(comm_id, comm_cor, member_arrays)
 
     def _shared_handle(self) -> dict:
         g = self.graph
@@ -196,8 +173,12 @@ class SteinerKCore(SelectiveCommunityDetector):
             tmpdir = tempfile.mkdtemp(dir=_shm_dir())
         coreness_path = os.path.join(tmpdir, "coreness.feather")
         _write_column(coreness_path, "coreness", self.coreness, "feather")
-        return {"graph_base": graph_base, "graph_fmt": graph_fmt,
-                "coreness": coreness_path, "tmpdir": tmpdir}
+        return {
+            "graph_base": graph_base,
+            "graph_fmt": graph_fmt,
+            "coreness": coreness_path,
+            "tmpdir": tmpdir,
+        }
 
     @classmethod
     def _from_shared_handle(cls, handle: dict) -> "SteinerKCore":

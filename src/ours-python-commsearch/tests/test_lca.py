@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from commsearch.structures.lca import LCA
+from commsearch.structures import CSR, build_lca
 
 
 def _child_csr(parents, root):
@@ -51,8 +51,8 @@ def _random_tree(n, rng):
 def test_single_node_query():
     parents, root = np.array([0, 0, 1], dtype=np.uint32), 0
     indptr, indices = _child_csr(parents, root)
-    lca = LCA.build(indptr, indices, root)
-    out = lca.query(np.array([2], dtype=np.uint32), np.array([0, 1], dtype=np.int64))
+    lca = build_lca(CSR(indptr, indices), root)
+    out = lca.ancestor_batch(CSR(np.array([0, 1], dtype=np.int64), np.array([2], dtype=np.uint32)))
     assert out[0] == 2
 
 
@@ -62,7 +62,7 @@ def test_lca_matches_bruteforce(seed):
     n = int(rng.integers(2, 40))
     parents, root = _random_tree(n, rng)
     indptr, indices = _child_csr(parents, root)
-    lca = LCA.build(indptr, indices, root)
+    lca = build_lca(CSR(indptr, indices), root)
 
     q_flat, q_ptr = [], [0]
     expected = []
@@ -73,7 +73,7 @@ def test_lca_matches_bruteforce(seed):
         q_ptr.append(len(q_flat))
         expected.append(_brute_lca(parents, root, q.tolist()))
 
-    out = lca.query(
-        np.array(q_flat, dtype=np.uint32), np.array(q_ptr, dtype=np.int64)
+    out = lca.ancestor_batch(
+        CSR(np.array(q_ptr, dtype=np.int64), np.array(q_flat, dtype=np.uint32))
     )
     assert out.tolist() == expected

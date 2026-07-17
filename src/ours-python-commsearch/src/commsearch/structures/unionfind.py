@@ -37,12 +37,6 @@ def make_unionfind(dtype=NODE_DTYPE):
             self.size[ru] += self.size[rv]
             return ru
 
-        def find_batch(self, xs):
-            out = np.empty(len(xs), dtype=dtype)
-            for i in range(len(xs)):
-                out[i] = self.find(xs[i])
-            return out
-
     return UnionFind
 
 
@@ -62,9 +56,6 @@ def make_subset_unionfind(dtype=NODE_DTYPE):
 
         def find(self, x):
             return self.uf.find(x)
-
-        def find_batch(self, xs):
-            return self.uf.find_batch(xs)
 
         def merge(self, u, v):
             ru, rv = self.uf.find(u), self.uf.find(v)

@@ -132,6 +132,9 @@ def test_cross_check_steiner_on_dnc(dnc):
     sk = SteinerKCore(g, cor)
     ss = ShellStruct.build(g, cor)
     rng = np.random.default_rng(0)
+    # single seed, or a seed + one of its neighbours -> always connected, so the
+    # whole batch runs in one Steiner sweep (no per-query ValueError to skip).
+    queries = []
     for _ in range(300):
         v = int(rng.integers(0, g.num_nodes))
         seeds = {v}
@@ -139,12 +142,9 @@ def test_cross_check_steiner_on_dnc(dnc):
             nb = g.indices[g.indptr[v] : g.indptr[v + 1]]
             if len(nb):
                 seeds.add(int(rng.choice(nb)))
-        q = np.array(sorted(seeds))
-        try:
-            sc = sk.run([q])[0]
-        except ValueError:
-            continue  # Steiner rejects disconnected seeds; skip
-        cc = ss.run([q])[0]
+        queries.append(np.array(sorted(seeds)))
+
+    for sc, cc in zip(sk.run(queries), ss.run(queries)):
         assert sc.coreness == cc.coreness
         assert set(sc.vertices.tolist()) == set(cc.vertices.tolist())
 
@@ -156,8 +156,11 @@ def test_save_load_roundtrip(tmp_path, dnc):
     ss.save(cp, tp)
     ss2 = ShellStruct.load(cp, tp)
 
-    for f in ("assign", "node_coreness", "nv_flat", "nv_indptr", "tree_indptr", "tree_indices"):
+    for f in ("assign", "node_coreness"):
         assert np.array_equal(getattr(ss, f), getattr(ss2, f)), f
+    for f in ("node_vertices", "tree"):
+        assert np.array_equal(getattr(ss, f).indptr, getattr(ss2, f).indptr), f + ".indptr"
+        assert np.array_equal(getattr(ss, f).values, getattr(ss2, f).values), f + ".values"
     assert ss.root == ss2.root
 
     rng = np.random.default_rng(1)
