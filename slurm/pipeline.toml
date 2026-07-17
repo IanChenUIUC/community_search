@@ -1,6 +1,6 @@
 [defaults.slurm]
 cpus = 16
-mem  = "256GB"
+mem  = "128GB"
 time = "4:00:00"
 partition = "secondary"
 
@@ -24,13 +24,17 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
   cd ${root}/src/pkc-core-decomposition && make
   cd ${root}/src/csk-commsearch && make
   cd ${root}/src/gullo-shellstruct && mvn compile
-  cd ${root}/src/utilities && uv sync --reinstall --refresh
-  cd ${root}/src/lbug-core-decomposition && uv sync --reinstall --refresh
+  cd ${root}/src/utilities && uv sync
+  cd ${root}/src/lbug-core-decomposition && uv sync
+  cd ${root}/src/networkit-core-decomposition && uv sync
+  cd ${root}/src/ours-icebug-commsearch && uv sync
+  cd ${root}/src/ours-python-commsearch && uv sync
 " 1> ${stdout} 2> ${stderr} 
 """
 
 [recipe.gbbs-format]
 array   = true
+slurm   = { mem = "256GB" }
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["build"]
 
@@ -45,6 +49,11 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
     ${input}/${dataset}.csv \
     ${input}/${dataset}.gbbs.adj \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
+  ${root}/src/gbbs-core-decomposition/bazel-bin/utils/compressor -s \
+    -o ${input}/${dataset}.gbbs.bin \
+    ${input}/${dataset}.gbbs.adj \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
 """
 
 [recipe.pkc-format]
@@ -65,6 +74,25 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
+[recipe.nk-format]
+array   = true
+params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+deps    = ["build"]
+
+stdout  = "${output}/${dataset}/nk-format/stdout.txt"
+stderr  = "${output}/${dataset}/nk-format/stderr.txt"
+timing  = "${output}/${dataset}/nk-format/timing.txt"
+
+command = """
+mkdir -p ${output}/${dataset}/nk-format
+source ${root}/src/networkit-core-decomposition/.venv/bin/activate
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
+  ${root}/src/networkit-core-decomposition/csv2nk.py \
+    --edgelist ${input}/${dataset}.csv \
+    --output ${input}/${dataset}.nk.bin \
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
+"""
+
 [recipe.csr-format]
 array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
@@ -76,36 +104,43 @@ timing  = "${output}/${dataset}/csr-format/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/csr-format
+source ${root}/src/utilities/.venv/bin/activate
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  uv run --project ${root}/src/utilities ${root}/src/utilities/csv2csr.py  \
+  python3 ${root}/src/utilities/csv2csr.py  \
     ${input}/${dataset}.csv \
     ${input}/${dataset} \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  uv run --project ${root}/src/utilities ${root}/src/utilities/pq2pf.py  \
+  python3 ${root}/src/utilities/pq2pf.py -w 32\
+    ${input}/${dataset}.indices.parquet \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr}) 
+mv ${input}/${dataset}.indices.feather ${input}/${dataset}.indices32.feather
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
+  python3 ${root}/src/utilities/pq2pf.py \
     ${input}/${dataset}.indptr.parquet \
     ${input}/${dataset}.indices.parquet \
-  1>> ${stdout} 2>> ${stderr} 
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr}) 
 """
 
-[recipe.lbug-format]
-array   = true
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["build"]
+### Removing Ladybug from the experiment
+# [recipe.lbug-format]
+# array   = true
+# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+# deps    = ["build"]
 
-stdout  = "${output}/${dataset}/lbug-format/stdout.txt"
-stderr  = "${output}/${dataset}/lbug-format/stderr.txt"
-timing  = "${output}/${dataset}/lbug-format/timing.txt"
+# stdout  = "${output}/${dataset}/lbug-format/stdout.txt"
+# stderr  = "${output}/${dataset}/lbug-format/stderr.txt"
+# timing  = "${output}/${dataset}/lbug-format/timing.txt"
 
-command = """
-mkdir -p ${output}/${dataset}/lbug-format
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  uv run --project ${root}/src/utilities ${root}/src/utilities/csv2csr.py  \
-    ${input}/${dataset}.csv \
-    ${input}/${dataset}.lbug \
-    --no-symmetrize \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
-"""
+# command = """
+# mkdir -p ${output}/${dataset}/lbug-format
+# uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
+#   uv run --project ${root}/src/utilities ${root}/src/utilities/csv2csr.py  \
+#     ${input}/${dataset}.csv \
+#     ${input}/${dataset}.lbug \
+#     --no-symmetrize \
+#   1> >(tee ${stdout}) 2> >(tee ${stderr})
+# """
 
 [recipe.gbbs-core-decomp]
 array   = true
@@ -119,9 +154,9 @@ timing  = "${output}/${dataset}/gbbs-core-decomp/timing.txt"
 command = """
 mkdir -p ${output}/${dataset}/gbbs-core-decomp
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  ${root}/src/gbbs-core-decomposition/bazel-bin/benchmarks/KCore/JulienneDBS17/KCore_main -s -rounds 1 \
+  ${root}/src/gbbs-core-decomposition/bazel-bin/benchmarks/KCore/JulienneDBS17/KCore_main -s -b -rounds 1 \
     -o ${output}/${dataset}/gbbs-core-decomp/cores.csv \
-    ${input}/${dataset}.gbbs.adj \
+    ${input}/${dataset}.gbbs.bin \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
@@ -138,7 +173,7 @@ command = """
 mkdir -p ${output}/${dataset}/ucr-core-decomp
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
   ${root}/src/ucrparlay-core-decomposition/KCore/kcore -s \
-    -i ${input}/${dataset}.gbbs.adj \
+    -i ${input}/${dataset}.gbbs.bin \
     -o ${output}/${dataset}/ucr-core-decomp/cores.csv \
     -l ${stdout} \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
@@ -162,29 +197,30 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
-[recipe.lbug-core-decomp]
-array   = true
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["csr-format(dataset=${dataset})"]
+### removing Ladybug from the experiment
+# [recipe.lbug-core-decomp]
+# array   = true
+# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+# deps    = ["lbug-format(dataset=${dataset})"]
 
-stdout  = "${output}/${dataset}/lbug-core-decomp/stdout.txt"
-stderr  = "${output}/${dataset}/lbug-core-decomp/stderr.txt"
-timing  = "${output}/${dataset}/lbug-core-decomp/timing.txt"
+# stdout  = "${output}/${dataset}/lbug-core-decomp/stdout.txt"
+# stderr  = "${output}/${dataset}/lbug-core-decomp/stderr.txt"
+# timing  = "${output}/${dataset}/lbug-core-decomp/timing.txt"
 
-command = """
-mkdir -p ${output}/${dataset}/lbug-core-decomp
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  uv run --project ${root}/src/lbug-core-decomposition ${root}/src/lbug-core-decomposition/main.py \
-    ${input}/${dataset}.lbug.indptr.parquet \
-    ${input}/${dataset}.lbug.indices.parquet \
-    ${output}/${dataset}/lbug-core-decomp/cores.csv \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
-"""
+# command = """
+# mkdir -p ${output}/${dataset}/lbug-core-decomp
+# uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
+#   uv run --project ${root}/src/lbug-core-decomposition ${root}/src/lbug-core-decomposition/main.py \
+#     ${input}/${dataset}.lbug.indptr.parquet \
+#     ${input}/${dataset}.lbug.indices.parquet \
+#     ${output}/${dataset}/lbug-core-decomp/cores.csv \
+#   1> >(tee ${stdout}) 2> >(tee ${stderr})
+# """
 
 [recipe.nk-core-decomp]
 array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["build"]
+deps    = ["nk-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}/nk-core-decomp/stdout.txt"
 stderr  = "${output}/${dataset}/nk-core-decomp/stderr.txt"
@@ -192,9 +228,10 @@ timing  = "${output}/${dataset}/nk-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/nk-core-decomp
+source ${root}/src/networkit-core-decomposition/.venv/bin/activate
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/main.py \
-    --edgelist ${input}/${dataset}.csv \
+  python3 ${root}/src/networkit-core-decomposition/main.py \
+    --graph ${input}/${dataset}.nk.bin \
     --output ${output}/${dataset}/nk-core-decomp/cores.csv \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
@@ -210,26 +247,27 @@ timing  = "${output}/${dataset}/ib-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/ib-core-decomp
+source ${root}/src/ours-icebug-commsearch/.venv/bin/activate
 export LD_LIBRARY_PATH=$(
-    uv run --project ${root}/src/ours-icebug-commsearch python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+    python3 -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
   ):$LD_LIBRARY_PATH
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  uv run --project ${root}/src/ours-icebug-commsearch ${root}/src/ours-icebug-commsearch/core_decomposition.py \
+  python3 ${root}/src/ours-icebug-commsearch/core_decomposition.py \
     ${input}/${dataset}.indptr.feather \
     ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/ib-core-decomp/cores.csv
+    ${output}/${dataset}/ib-core-decomp/cores.csv \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
 [recipe.network-stats]
-# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-params  = [
-  { dataset = "abm14" }, { dataset = "bitcoin" }, { dataset = "cen" }, { dataset = "dbpedia_link" }, { dataset = "livejournal" }, { dataset = "microsoft_concept" }, { dataset = "wikipedia_link" },
-  { dataset = "friendster", slurm = { mem = "256GB" } },
-  { dataset = "twitter_social", slurm = { mem = "256GB" } },
-]
-
-deps    = ["csr-format(dataset=${dataset})"]
+# params  = [
+#   { dataset = "abm14" }, { dataset = "bitcoin" }, { dataset = "cen" }, { dataset = "dbpedia_link" }, { dataset = "livejournal" }, { dataset = "microsoft_concept" }, { dataset = "wikipedia_link" },
+#   { dataset = "friendster", slurm = { mem = "256GB" } },
+#   { dataset = "twitter_social", slurm = { mem = "256GB" } },
+# ]
+array   = true
+params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+deps    = ["nk-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}/network-stats/stdout.txt"
 stderr  = "${output}/${dataset}/network-stats/stderr.txt"
@@ -237,15 +275,16 @@ timing  = "${output}/${dataset}/network-stats/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/network-stats
+source ${root}/src/networkit-core-decomposition/.venv/bin/activate
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/network-stats.py \
-    --edgelist ${input}/${dataset}.csv \
+  python3 ${root}/src/networkit-core-decomposition/network-stats.py \
+    --graph ${input}/${dataset}.nk.bin \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
 [recipe.centrality]
 params  = { dataset = ["cen", "abm14"] }
-deps    = ["build"]
+deps    = ["nk-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}/centrality/stdout.txt"
 stderr  = "${output}/${dataset}/centrality/stderr.txt"
@@ -253,25 +292,18 @@ timing  = "${output}/${dataset}/centrality/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/centrality
+source ${root}/src/networkit-core-decomposition/.venv/bin/activate
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  uv run --project ${root}/src/networkit-core-decomposition ${root}/src/networkit-core-decomposition/centrality.py \
-    --edgelist ${input}/${dataset}.csv \
+  python3 ${root}/src/networkit-core-decomposition/centrality.py \
+    --graph ${input}/${dataset}.nk.bin \
     --output ${output}/${dataset}/centrality/centrality.csv \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
 [recipe.icebug-shell-struct]
-params  = [
-  { dataset = "abm14", slurm = { cpus = 16, mem = "64GB" } },
-  { dataset = "bitcoin", slurm = { cpus = 16, mem = "64GB" } },
-  { dataset = "cen", slurm = { cpus = 16, mem = "64GB" } },
-  { dataset = "dbpedia_link", slurm = { cpus = 16, mem = "64GB" } },
-  { dataset = "friendster", slurm = { cpus = 16, mem = "64GB" } },
-  { dataset = "livejournal", slurm = { cpus = 16, mem = "64GB" } },
-  { dataset = "microsoft_concept", slurm = { cpus = 16, mem = "64GB" } },
-  { dataset = "twitter_social", slurm = { cpus = 16, mem = "256GB" } },
-  { dataset = "wikipedia_link", slurm = { cpus = 16, mem = "256GB" } },
-]
+array   = true
+slurm   = { mem = "128GB" }
+params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["csr-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}/icebug-shell-struct/stdout.txt"
@@ -280,11 +312,12 @@ timing  = "${output}/${dataset}/icebug-shell-struct/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/icebug-shell-struct
+source ${root}/src/ours-icebug-commsearch/.venv/bin/activate
 export LD_LIBRARY_PATH=$(
-    uv run --project ${root}/src/ours-icebug-commsearch python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+    python3 -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
   ):$LD_LIBRARY_PATH
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  uv run --project ${root}/src/ours-icebug-commsearch ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
+  python3 ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
     ${input}/${dataset}.indptr.feather \
     ${input}/${dataset}.indices.feather \
     ${output}/${dataset}/icebug-shell-struct/shell \
@@ -293,6 +326,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
 
 [recipe.cold-warm]
 params  = { dataset = ["cen", "abm14"] }
+deps    = ["csr-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}/cold-warm/stdout.txt"
 stderr  = "${output}/${dataset}/cold-warm/stderr.txt"
@@ -308,3 +342,6 @@ export stderr=${stderr}
 export timing=${timing}
 bash ${root}/src/cold-warm/run.sh
 """
+
+# [recipe.ours-py-v-ib]
+# params  = { dataset = ["cen", "abm14"] }

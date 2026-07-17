@@ -7,15 +7,15 @@ import networkit as nk
 
 
 @click.command()
-@click.option("--edgelist", required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option("--graph", required=True, type=click.Path(exists=True, dir_okay=False))
 @click.option("--output", required=True, type=click.Path(dir_okay=False))
-def stats(edgelist, output):
-    graph = nk.graphio.EdgeListReader(",", 0, "s", continuous=True).read(edgelist)
+def stats(graph, output):
+    gr = nk.readGraph(graph, nk.Format.NetworkitBinary)
 
-    cores = nk.centrality.CoreDecomposition(graph).run().scores()
-    lcc = nk.centrality.LocalClusteringCoefficient(graph).run().scores()
-    pr = nk.centrality.PageRank(graph).run().scores()
-    deg = nk.centrality.DegreeCentrality(graph).run().scores()
+    cores = nk.centrality.CoreDecomposition(gr).run().scores()
+    lcc = nk.centrality.LocalClusteringCoefficient(gr).run().scores()
+    pr = nk.centrality.PageRank(gr).run().scores()
+    deg = nk.centrality.DegreeCentrality(gr).run().scores()
 
     pathlib.Path(output).parent.mkdir(exist_ok=True, parents=True)
     df = pd.DataFrame(dict(coreness=cores, c_coef=lcc, pagerank=pr, degree=deg))
