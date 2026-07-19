@@ -1,9 +1,12 @@
 [submodule "src/pkc-core-decomposition"]
 	path = src/pkc-core-decomposition
 	url = https://github.com/IanChenUIUC/PKC
+	branch = persist-kcore
 [submodule "src/gbbs-core-decomposition"]
 	path = src/gbbs-core-decomposition
 	url = https://github.com/IanChenUIUC/gbbs
+	branch = persist-kcore
 [submodule "src/ucrparlay-core-decomposition"]
 	path = src/ucrparlay-core-decomposition
 	url = https://github.com/IanChenUIUC/Parallel-KCore
+	branch = persist-kcore
