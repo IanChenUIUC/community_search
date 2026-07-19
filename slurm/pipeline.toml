@@ -18,7 +18,7 @@ timing  = "${output}/build.resources"
 command = """
 mkdir -p ${input}
 mkdir -p ${output}
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- bash -c "
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- bash -c "
   cd ${root}/src/gbbs-core-decomposition && bazel build //...
   cd ${root}/src/ucrparlay-core-decomposition/KCore && make
   cd ${root}/src/pkc-core-decomposition && make
@@ -44,7 +44,7 @@ timing  = "${output}/${dataset}/gbbs-format/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/gbbs-format
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
   ${root}/src/utilities/csv2gbbs.sh  \
     ${input}/${dataset}.csv \
     ${input}/${dataset}.gbbs.adj \
@@ -67,7 +67,7 @@ timing  = "${output}/${dataset}/pkc-format/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/pkc-format
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
   ${root}/src/utilities/csv2pkc.sh  \
     ${input}/${dataset}.csv \
     ${input}/${dataset}.pkc.adj \
@@ -85,9 +85,8 @@ timing  = "${output}/${dataset}/nk-format/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/nk-format
-source ${root}/src/networkit-core-decomposition/.venv/bin/activate
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  python3 ${root}/src/networkit-core-decomposition/csv2nk.py \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
+  ${root}/src/networkit-core-decomposition/.venv/bin/python ${root}/src/networkit-core-decomposition/csv2nk.py \
     --edgelist ${input}/${dataset}.csv \
     --output ${input}/${dataset}.nk.bin \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
@@ -104,19 +103,18 @@ timing  = "${output}/${dataset}/csr-format/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/csr-format
-source ${root}/src/utilities/.venv/bin/activate
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  python3 ${root}/src/utilities/csv2csr.py  \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
+  ${root}/src/utilities/.venv/bin/python ${root}/src/utilities/csv2csr.py  \
     ${input}/${dataset}.csv \
     ${input}/${dataset} \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  python3 ${root}/src/utilities/pq2pf.py -w 32 \
+  ${root}/src/utilities/.venv/bin/python ${root}/src/utilities/pq2pf.py -w 32 \
     ${input}/${dataset}.indices.parquet \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr}) 
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
 mv ${input}/${dataset}.indices.feather ${input}/${dataset}.indices32.feather
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  python3 ${root}/src/utilities/pq2pf.py \
+  ${root}/src/utilities/.venv/bin/python ${root}/src/utilities/pq2pf.py \
     ${input}/${dataset}.indptr.parquet \
     ${input}/${dataset}.indices.parquet \
   1> >(tee -a ${stdout}) 2> >(tee -a ${stderr}) 
@@ -147,6 +145,7 @@ array   = true
 # params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 params  = { dataset = ["abm14", "cen"] }
 deps    = ["gbbs-format(dataset=${dataset})"]
+slurm   = { exclusive = true }
 
 stdout  = "${output}/${dataset}/gbbs-core-decomp/stdout.txt"
 stderr  = "${output}/${dataset}/gbbs-core-decomp/stderr.txt"
@@ -154,7 +153,7 @@ timing  = "${output}/${dataset}/gbbs-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/gbbs-core-decomp
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
   ${root}/src/gbbs-core-decomposition/bazel-bin/benchmarks/KCore/JulienneDBS17/KCore_main -s -b -rounds 1 \
     -o ${output}/${dataset}/gbbs-core-decomp/cores.csv \
     ${input}/${dataset}.gbbs.bin \
@@ -166,6 +165,7 @@ array   = true
 # params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 params  = { dataset = ["abm14", "cen"] }
 deps    = ["gbbs-format(dataset=${dataset})"]
+slurm   = { exclusive = true }
 
 stdout  = "${output}/${dataset}/ucr-core-decomp/stdout.txt"
 stderr  = "${output}/${dataset}/ucr-core-decomp/stderr.txt"
@@ -173,7 +173,7 @@ timing  = "${output}/${dataset}/ucr-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/ucr-core-decomp
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
   ${root}/src/ucrparlay-core-decomposition/KCore/kcore -s \
     -i ${input}/${dataset}.gbbs.bin \
     -o ${output}/${dataset}/ucr-core-decomp/cores.csv \
@@ -186,6 +186,7 @@ array   = true
 # params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 params  = { dataset = ["abm14", "cen"] }
 deps    = ["pkc-format(dataset=${dataset})"]
+slurm   = { exclusive = true }
 
 stdout  = "${output}/${dataset}/pkc-core-decomp/stdout.txt"
 stderr  = "${output}/${dataset}/pkc-core-decomp/stderr.txt"
@@ -193,7 +194,7 @@ timing  = "${output}/${dataset}/pkc-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/pkc-core-decomp
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
   ${root}/src/pkc-core-decomposition/pkc.exe \
     ${input}/${dataset}.pkc.adj \
     ${output}/${dataset}/pkc-core-decomp/cores.csv \
@@ -225,6 +226,7 @@ array   = true
 # params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 params  = { dataset = ["abm14", "cen"] }
 deps    = ["nk-format(dataset=${dataset})"]
+slurm   = { exclusive = true }
 
 stdout  = "${output}/${dataset}/nk-core-decomp/stdout.txt"
 stderr  = "${output}/${dataset}/nk-core-decomp/stderr.txt"
@@ -232,9 +234,8 @@ timing  = "${output}/${dataset}/nk-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/nk-core-decomp
-source ${root}/src/networkit-core-decomposition/.venv/bin/activate
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  python3 ${root}/src/networkit-core-decomposition/main.py \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
+  ${root}/src/networkit-core-decomposition/.venv/bin/python ${root}/src/networkit-core-decomposition/main.py \
     --graph ${input}/${dataset}.nk.bin \
     --output ${output}/${dataset}/nk-core-decomp/cores.csv \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
@@ -245,6 +246,7 @@ array   = true
 # params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 params  = { dataset = ["abm14", "cen"] }
 deps    = ["csr-format(dataset=${dataset})"]
+slurm   = { exclusive = true }
 
 stdout  = "${output}/${dataset}/ib-core-decomp/stdout.txt"
 stderr  = "${output}/${dataset}/ib-core-decomp/stderr.txt"
@@ -252,12 +254,11 @@ timing  = "${output}/${dataset}/ib-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/ib-core-decomp
-source ${root}/src/ours-icebug-commsearch/.venv/bin/activate
 export LD_LIBRARY_PATH=$(
-    python3 -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
   ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  python3 ${root}/src/ours-icebug-commsearch/core_decomposition.py \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
+  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/core_decomposition.py \
     ${input}/${dataset}.indptr.feather \
     ${input}/${dataset}.indices.feather \
     ${output}/${dataset}/ib-core-decomp/cores.csv \
@@ -280,9 +281,8 @@ timing  = "${output}/${dataset}/network-stats/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/network-stats
-source ${root}/src/networkit-core-decomposition/.venv/bin/activate
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  python3 ${root}/src/networkit-core-decomposition/network-stats.py \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
+  ${root}/src/networkit-core-decomposition/.venv/bin/python ${root}/src/networkit-core-decomposition/network-stats.py \
     --graph ${input}/${dataset}.nk.bin \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
@@ -297,9 +297,8 @@ timing  = "${output}/${dataset}/centrality/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/centrality
-source ${root}/src/networkit-core-decomposition/.venv/bin/activate
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  python3 ${root}/src/networkit-core-decomposition/centrality.py \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
+  ${root}/src/networkit-core-decomposition/.venv/bin/python ${root}/src/networkit-core-decomposition/centrality.py \
     --graph ${input}/${dataset}.nk.bin \
     --output ${output}/${dataset}/centrality/centrality.csv \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
@@ -317,12 +316,11 @@ timing  = "${output}/${dataset}/icebug-shell-struct/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/icebug-shell-struct
-source ${root}/src/ours-icebug-commsearch/.venv/bin/activate
 export LD_LIBRARY_PATH=$(
-    python3 -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
   ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  python3 ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
+  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
     ${input}/${dataset}.indptr.feather \
     ${input}/${dataset}.indices.feather \
     ${output}/${dataset}/icebug-shell-struct/shell \
