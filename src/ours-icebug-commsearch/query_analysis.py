@@ -22,11 +22,6 @@ def _read_column(path: str, column: str) -> pa.Array:
     sys.exit(1)
 
 
-def min_deg(graph, comm):
-    subg = nk.graphtools.subgraphFromNodes(graph, comm)
-    return min(subg.degree(u) for u in subg.iterNodes())
-
-
 def coreness_queries(graph, shell, scores, size, threshold=0.99, num=100, seed=1234):
     valid = np.flatnonzero(scores >= np.quantile(scores, threshold))
     rng = np.random.default_rng(seed)

@@ -76,7 +76,8 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
 
 [recipe.nk-format]
 array   = true
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
+params  = { dataset = ["abm14", "cen"] }
 deps    = ["build"]
 
 stdout  = "${output}/${dataset}/nk-format/stdout.txt"
@@ -273,7 +274,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
 # ]
 array   = true
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["nk-format(dataset=${dataset})"]
+deps    = ["csr-format(dataset=${dataset})"]
 
 stdout  = "${output}/${dataset}/network-stats/stdout.txt"
 stderr  = "${output}/${dataset}/network-stats/stderr.txt"
@@ -282,8 +283,9 @@ timing  = "${output}/${dataset}/network-stats/timing.txt"
 command = """
 mkdir -p ${output}/${dataset}/network-stats
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/networkit-core-decomposition/.venv/bin/python ${root}/src/networkit-core-decomposition/network-stats.py \
-    --graph ${input}/${dataset}.nk.bin \
+  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/network-stats.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
