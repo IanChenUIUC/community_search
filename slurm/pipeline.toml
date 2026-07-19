@@ -50,7 +50,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
     ${input}/${dataset}.gbbs.adj \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  ${root}/src/gbbs-core-decomposition/bazel-bin/utils/compressor -s \
+  ${root}/src/gbbs-core-decomposition/bazel-bin/utils/converter -s -enc binary \
     -o ${input}/${dataset}.gbbs.bin \
     ${input}/${dataset}.gbbs.adj \
   1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
