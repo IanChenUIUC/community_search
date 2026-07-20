@@ -31,7 +31,7 @@ def main(indptr_path, indices_path):
     graph = nk.Graph.fromCSR(n, directed=False, out_indices=indices, out_indptr=indptr)
     print(f"n = {graph.numberOfNodes()}, m = {graph.numberOfEdges()}", flush=True)
 
-    lcc = nk.centrality.LocalClusteringCoefficient(graph)
+    lcc = nk.centrality.LocalClusteringCoefficient(graph, turbo=True)
     scores = np.mean(lcc.run().scores())
     print("average clustering coeff =", float(scores), flush=True)
     del lcc

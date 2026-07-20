@@ -282,6 +282,9 @@ timing  = "${output}/${dataset}/network-stats/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/network-stats
+export LD_LIBRARY_PATH=$(
+    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+  ):$LD_LIBRARY_PATH
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
   ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/network-stats.py \
     ${input}/${dataset}.indptr.feather \
