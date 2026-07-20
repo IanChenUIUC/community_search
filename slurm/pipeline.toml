@@ -146,7 +146,7 @@ array   = true
 # params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 params  = { dataset = ["abm14", "cen"] }
 deps    = ["gbbs-format(dataset=${dataset})"]
-slurm   = { exclusive = true }
+slurm   = { cpus = 16, exclusive = true }
 
 stdout  = "${output}/${dataset}/gbbs-core-decomp/stdout.txt"
 stderr  = "${output}/${dataset}/gbbs-core-decomp/stderr.txt"
@@ -154,6 +154,7 @@ timing  = "${output}/${dataset}/gbbs-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/gbbs-core-decomp
+export PARLAY_NUM_THREADS=${slurm.cpus}
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
   ${root}/src/gbbs-core-decomposition/bazel-bin/benchmarks/KCore/JulienneDBS17/KCore_main -s -b -rounds 1 \
     -o ${output}/${dataset}/gbbs-core-decomp/cores.csv \
@@ -166,7 +167,7 @@ array   = true
 # params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 params  = { dataset = ["abm14", "cen"] }
 deps    = ["gbbs-format(dataset=${dataset})"]
-slurm   = { exclusive = true }
+slurm   = { cpus = 16, exclusive = true }
 
 stdout  = "${output}/${dataset}/ucr-core-decomp/stdout.txt"
 stderr  = "${output}/${dataset}/ucr-core-decomp/stderr.txt"
@@ -174,6 +175,7 @@ timing  = "${output}/${dataset}/ucr-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/ucr-core-decomp
+export PARLAY_NUM_THREADS=${slurm.cpus}
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
   ${root}/src/ucrparlay-core-decomposition/KCore/kcore -s \
     -i ${input}/${dataset}.gbbs.bin \
@@ -187,7 +189,7 @@ array   = true
 # params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 params  = { dataset = ["abm14", "cen"] }
 deps    = ["pkc-format(dataset=${dataset})"]
-slurm   = { exclusive = true }
+slurm   = { cpus = 16, exclusive = true }
 
 stdout  = "${output}/${dataset}/pkc-core-decomp/stdout.txt"
 stderr  = "${output}/${dataset}/pkc-core-decomp/stderr.txt"
@@ -195,6 +197,7 @@ timing  = "${output}/${dataset}/pkc-core-decomp/timing.txt"
 
 command = """
 mkdir -p ${output}/${dataset}/pkc-core-decomp
+export OMP_NUM_THREADS=${slurm.cpus}
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
   ${root}/src/pkc-core-decomposition/pkc.exe \
     ${input}/${dataset}.pkc.adj \
@@ -227,7 +230,7 @@ array   = true
 # params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 params  = { dataset = ["abm14", "cen"] }
 deps    = ["nk-format(dataset=${dataset})"]
-slurm   = { exclusive = true }
+slurm   = { cpus = 16, exclusive = true }
 
 stdout  = "${output}/${dataset}/nk-core-decomp/stdout.txt"
 stderr  = "${output}/${dataset}/nk-core-decomp/stderr.txt"
@@ -239,6 +242,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
   ${root}/src/networkit-core-decomposition/.venv/bin/python ${root}/src/networkit-core-decomposition/main.py \
     --graph ${input}/${dataset}.nk.bin \
     --output ${output}/${dataset}/nk-core-decomp/cores.csv \
+    --threads ${slurm.cpus} \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
@@ -247,7 +251,7 @@ array   = true
 # params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 params  = { dataset = ["abm14", "cen"] }
 deps    = ["csr-format(dataset=${dataset})"]
-slurm   = { exclusive = true }
+slurm   = { cpus = 16, exclusive = true }
 
 stdout  = "${output}/${dataset}/ib-core-decomp/stdout.txt"
 stderr  = "${output}/${dataset}/ib-core-decomp/stderr.txt"
@@ -263,6 +267,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
     ${input}/${dataset}.indptr.feather \
     ${input}/${dataset}.indices.feather \
     ${output}/${dataset}/ib-core-decomp/cores.csv \
+    --threads ${slurm.cpus} \
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 

@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """
-mytime.py - track peak RSS, anonymous memory
+mytime.py - track wall time, CPU time, peak RSS, anonymous memory
 Usage: memtrack.py <command> [args...]
 Output: key=value lines
+  wall_s        : wall-clock seconds
+  user_s        : user CPU seconds, summed over all threads (getrusage)
+  sys_s         : system CPU seconds, summed over all threads (getrusage)
+  cpu_s         : user_s + sys_s
   peak_rss_kb   : kernel high-water mark via getrusage (same as /usr/bin/time -v)
   peak_anon_kb  : polling high-water mark of Anonymous from smaps_rollup
 """
@@ -90,11 +94,19 @@ def main(output, append, cmd):
 
     elapsed = time.monotonic() - start
 
-    # kernel-maintained HWM, same source as /usr/bin/time -v
-    peak_rss_kb = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+    # kernel-maintained totals, same source as /usr/bin/time -v (accumulated over
+    # the whole waited-for child tree). CPU time is summed across all threads, so
+    # avg_cpu_cores = cpu_s / wall is the mean parallelism (~cpus for a compute job).
+    ru = resource.getrusage(resource.RUSAGE_CHILDREN)
+    peak_rss_kb = ru.ru_maxrss
+    user_s, sys_s = ru.ru_utime, ru.ru_stime
+    cpu_s = user_s + sys_s
 
     print(f"exit_code={ret}", file=out)
     print(f"wall_s={elapsed:.3f}", file=out)
+    print(f"user_s={user_s:.3f}", file=out)
+    print(f"sys_s={sys_s:.3f}", file=out)
+    print(f"cpu_s={cpu_s:.3f}", file=out)
     print(f"peak_rss_kb={peak_rss_kb}", file=out)
     print(f"peak_pss={peak_pss}", file=out)
     print(f"peak_anon_kb={peak_anon}", file=out)

@@ -12,7 +12,12 @@ from networkit.centrality import CoreDecomposition
 @click.command()
 @click.option("--graph", required=True, type=click.Path(exists=True))
 @click.option("--output", required=True, type=click.Path())
-def coreness(graph, output):
+@click.option("--threads", type=int, default=None,
+              help="Pin NetworKit to this many threads (default: NetworKit's own).")
+def coreness(graph, output, threads):
+    if threads:
+        nk.setNumberOfThreads(threads)
+
     gr = nk.readGraph(graph, nk.Format.NetworkitBinary)
 
     start = time.perf_counter()
