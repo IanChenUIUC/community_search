@@ -6,7 +6,7 @@ from commsearch import Graph, SteinerKCore, ShellStruct
 
 def smol_graph():
     """pair of 3-clique and a 4-clique"""
-    indptr = [0, 2, 4, 7, 11, 14, 17, 20]
+    indptr = np.array([0, 2, 4, 7, 11, 14, 17, 20], dtype=np.uint64)
     indices = [1, 2, 0, 2, 0, 1, 3, 2, 4, 5, 6, 3, 5, 6, 3, 4, 6, 3, 4, 5]
     coreness = np.array([2, 2, 2, 3, 3, 3, 3], dtype=np.uint32)
     return Graph.from_csr(indptr, indices), coreness
