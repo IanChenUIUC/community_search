@@ -419,4 +419,42 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
     ${output}/${dataset}/ours-py-v-ib/query.csv \
     ${output}/${dataset}/ours-py-v-ib/icebug_shell_querytimes.csv \
   1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+
+## icebug steiner search
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-icebug_query_steiner.txt -- \
+  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_steiner.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}/ib-core-decomp/cores.csv \
+    ${output}/${dataset}/ours-py-v-ib/query.csv \
+    ${output}/${dataset}/ours-py-v-ib/icebug_steiner_querytimes.csv \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+
+## warmup_jit
+${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/warmup_jit.py \
+
+## python shell-struct building
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-python_build_shell.txt -- \
+  ${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/build_shellstruct.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices32.feather \
+    ${output}/${dataset}/ours-py-v-ib/python_shell \
+    ${output}/${dataset}/ib-core-decomp/cores.csv \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+
+## python shell-struct querying
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-python_query_shell.txt -- \
+  ${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/query_shellstruct.py \
+    ${output}/${dataset}/ours-py-v-ib/python_shell \
+    ${output}/${dataset}/ours-py-v-ib/query.csv \
+    ${output}/${dataset}/ours-py-v-ib/python_shell_querytimes.csv \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+
+## python steiner querying
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-python_query_steiner.txt -- \
+  ${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/query_steiner.py \
+    ${output}/${dataset}/ours-py-v-ib/python_shell \
+    ${output}/${dataset}/ours-py-v-ib/query.csv \
+    ${output}/${dataset}/ours-py-v-ib/python_shell_querytimes.csv \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
 """

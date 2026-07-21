@@ -38,6 +38,7 @@ def main(indptr_path, indices_path, coredecomp, queries_path, output):
     cores.sort("node_id")
     scores = cores.get_column("core").to_numpy()
     steiner = SteinerKCore(graph, scores)
+    steiner.warmup()
 
     with open(queries_path) as f:
         queries = [np.fromstring(line, sep=",") for line in f.readlines()]

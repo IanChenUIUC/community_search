@@ -8,6 +8,7 @@ dependencies = [
     "click>=8.4.2",
     "numba>=0.61",
     "numpy>=1.26,<2.3",
+    "pandas>=2.3.3",
     "polars>=1.42.1",
     "pyarrow>=17",
 ]
