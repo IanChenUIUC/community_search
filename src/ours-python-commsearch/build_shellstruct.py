@@ -14,8 +14,8 @@ from commsearch import Graph, ShellStruct
 @click.command()
 @click.argument("graph", type=click.Path())
 @click.argument("format", type=click.STRING)
-@click.argument("coredecomp", type=click.Path(dir_okay=False, exists=True))
 @click.argument("shell_base_path", type=click.Path(dir_okay=False))
+@click.argument("coredecomp", type=click.Path(dir_okay=False, exists=True))
 def main(graph, format, coredecomp, shell_base_path):
     cores = pl.read_csv(coredecomp, has_header=False, new_columns=["node_id", "core"])
     cores.sort("node_id")
