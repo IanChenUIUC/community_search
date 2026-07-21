@@ -1,10 +1,11 @@
 import sys
 import pathlib
+import time
 
 import click
 import networkit as nk
 import numpy as np
-import polars as pl
+import pandas as pd
 import pyarrow as pa
 import pyarrow.feather as pf
 import pyarrow.parquet as pq
@@ -23,31 +24,32 @@ def _read_column(path: str, column: str) -> pa.Array:
 @click.command()
 @click.argument("indptr_path", type=click.Path(exists=True, dir_okay=False))
 @click.argument("indices_path", type=click.Path(exists=True, dir_okay=False))
-@click.argument("shell_base_path", type=click.Path(dir_okay=False))
-@click.argument("cores", required=False, type=click.Path(exists=True, dir_okay=False))
-def main(indptr_path, indices_path, shell_base_path, cores):
+@click.argument("components_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("tree_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("queries_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("output", type=click.Path(dir_okay=False))
+def main(indptr_path, indices_path, components_path, tree_path, queries_path, output):
     indptr = _read_column(indptr_path, "indptr")
     indices = _read_column(indices_path, "indices")
 
     n, m = len(indptr) - 1, len(indices) // 2
     graph = nk.Graph.fromCSR(n, directed=False, out_indices=indices, out_indptr=indptr)
 
-    scores = None
-    if cores:
-        df = pl.read_csv(
-            cores,
-            has_header=False,
-            new_columns=["node_id", "core"],
-            schema_overrides={"core": pl.UInt64},
-        ).sort("node_id")
-        scores = df.get_column("core").to_numpy()
-
     shell = nk.scd.ShellStruct(graph)
-    shell.build(scores)
+    shell.load(components_path, tree_path)
 
-    components = pathlib.Path(shell_base_path).with_suffix(".components.feather")
-    tree = pathlib.Path(shell_base_path).with_suffix(".tree.feather")
-    shell.save(components, tree)
+    with open(queries_path) as f:
+        queries = [set(map(int, line.split(","))) for line in f.readlines()]
+
+    timing = []  # wall_s
+    for query in queries:
+        start = time.perf_counter()
+        _ = shell.expandOneCommunity(query)
+        end = time.perf_counter()
+        timing.append(end - start)
+
+    df = pd.DataFrame(timing, columns=["wall_s"])
+    df.to_csv(output, index=False)
 
 
 if __name__ == "__main__":

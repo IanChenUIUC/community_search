@@ -29,6 +29,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
   cd ${root}/src/networkit-core-decomposition && uv sync
   cd ${root}/src/ours-icebug-commsearch && uv sync
   cd ${root}/src/ours-python-commsearch && uv sync
+  cd ${root}/src/gen-query && uv sync
 " 1> ${stdout} 2> ${stderr} 
 """
 
@@ -300,6 +301,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
 [recipe.shellstruct-strong-scaling]
 params  = { dataset = ["abm14", "cen"] }
 deps    = ["csr-format(dataset=${dataset})"]
+slurm   = { cpus = 64, exclusive = true }
 
 stdout  = "${output}/${dataset}/shellstruct-strong-scaling/stdout.txt"
 stderr  = "${output}/${dataset}/shellstruct-strong-scaling/stderr.txt"
@@ -311,7 +313,7 @@ export LD_LIBRARY_PATH=$(
     ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
   ):$LD_LIBRARY_PATH
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/network-stats.py \
+  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/shellstruct_strong_scaling.py \
     ${input}/${dataset}.indptr.feather \
     ${input}/${dataset}.indices.feather \
     ${output}/${dataset}/shellstruct-strong-scaling/curve.csv
@@ -376,5 +378,45 @@ export timing=${timing}
 bash ${root}/src/cold-warm/run.sh
 """
 
-# [recipe.ours-py-v-ib]
-# params  = { dataset = ["cen", "abm14"] }
+[recipe.ours-py-v-ib]
+params  = { dataset = ["cen", "abm14"] }
+deps    = ["csr-format(dataset=${dataset})", "ib-core-decomp(dataset=${dataset})"]
+
+stdout  = "${output}/${dataset}/ours-py-v-ib/stdout.txt"
+stderr  = "${output}/${dataset}/ours-py-v-ib/stderr.txt"
+timing  = "${output}/${dataset}/ours-py-v-ib/timing"
+
+command = """
+mkdir -p ${output}/${dataset}/ours-py-v-ib
+export LD_LIBRARY_PATH=$(
+    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+  ):$LD_LIBRARY_PATH
+
+## generate queries
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-genquery.txt -- \
+  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/py_v_ib.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}/ours-py-v-ib/query.csv \
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
+
+## icebug shell-struct building
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-icebug_build_shell.txt -- \
+  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}/ours-py-v-ib/icebug_shell \
+    ${output}/${dataset}/ib-core-decomp/cores.csv \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+
+## icebug shell-struct search
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-icebug_query_shell.txt -- \
+  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_shellstruct.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}/ours-py-v-ib/icebug_shell.components.feather \
+    ${output}/${dataset}/ours-py-v-ib/icebug_shell.tree.feather \
+    ${output}/${dataset}/ours-py-v-ib/query.csv \
+    ${output}/${dataset}/ours-py-v-ib/icebug_shell_querytimes.csv \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+"""
