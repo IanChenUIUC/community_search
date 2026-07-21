@@ -1,11 +1,12 @@
 from math import frexp
 
 import numpy as np
-from numba import njit, uint32
-from numba.experimental import jitclass
+from numba import njit
+from numba.core import types
+from numba.core.extending import overload_method
+from numba.experimental import structref
 
 from ..graph import NODE_DTYPE, OFFSET_DTYPE
-from .csr import NB_NODE, NB_OFFSET
 
 # LCA over a rooted tree, reduced to RMQ over an Euler tour (Bender-Farach-Colton
 # sparse table): O(N log N) build, O(1) per query. `tour` holds tree-node ids
@@ -60,62 +61,68 @@ def _sparse_table(depths):
     return rmq
 
 
-def make_lca():
-    """Return an ``LCA`` jitclass: O(1) least-common-ancestor over a rooted tree,
-    built from its Euler tour + RMQ sparse table. Usable from Python
-    (``ancestor_batch``) and object-style inside ``@njit`` kernels
-    (``ancestor``). Rebuilt from the tree via :func:`build_lca` (never persisted).
-    """
-
-    @jitclass(
-        [
-            ("tour", NB_NODE[:]),
-            ("depths", uint32[:]),
-            ("pos", NB_OFFSET[:]),
-            ("rmq", NB_OFFSET[:, :]),
-        ]
-    )
-    class LCA:
-        def __init__(self, tour, depths, pos, rmq):
-            self.tour = tour
-            self.depths = depths
-            self.pos = pos
-            self.rmq = rmq
-
-        def ancestor(self, queries, qi):
-            """LCA tree-node of query ``qi``'s node set (row ``qi`` of the query
-            CSR): their min/max Euler positions, one RMQ lookup."""
-            nodes = queries.neighbors(qi)
-            lo = self.pos[nodes[0]]
-            hi = lo
-            for i in range(1, len(nodes)):
-                p = self.pos[nodes[i]]
-                if p < lo:
-                    lo = p
-                elif p > hi:
-                    hi = p
-            j = frexp(hi - lo + 1)[1] - 1  # floor(log2(window length))
-            a = self.rmq[lo, j]
-            b = self.rmq[hi - (1 << j) + 1, j]
-            return self.tour[a if self.depths[a] < self.depths[b] else b]
-
-        def ancestor_batch(self, queries):
-            """LCA of each query's node set (``queries`` a CSR of tree nodes)."""
-            out = np.empty(queries.num_rows(), dtype=NODE_DTYPE)
-            for qi in range(queries.num_rows()):
-                out[qi] = self.ancestor(queries, qi)
-            return out
-
-    return LCA
+@structref.register
+class LCAType(types.StructRef):
+    def preprocess_fields(self, fields):
+        return tuple((name, types.unliteral(typ)) for name, typ in fields)
 
 
-LCA = make_lca()
+@njit(cache=True)
+def _ancestor_batch(self, queries):
+    out = np.empty(queries.num_rows(), dtype=NODE_DTYPE)
+    for qi in range(queries.num_rows()):
+        out[qi] = self.ancestor(queries, qi)
+    return out
+
+
+class LCA(structref.StructRefProxy):
+    """O(1) least-common-ancestor over a rooted tree, built from its Euler tour +
+    RMQ sparse table. A numba ``structref``: usable object-style inside ``@njit``
+    kernels (``lca.ancestor(queries, qi)``) and from Python (``ancestor_batch``).
+    Rebuilt from the tree via :func:`build_lca` (never persisted)."""
+
+    def ancestor_batch(self, queries):
+        """LCA of each query's node set (``queries`` a CSR of tree nodes)."""
+        return _ancestor_batch(self, queries)
+
+
+structref.define_proxy(LCA, LCAType, ["tour", "depths", "pos", "rmq"])
+
+
+@overload_method(LCAType, "ancestor")
+def _ov_ancestor(self, queries, qi):
+    def impl(self, queries, qi):
+        nodes = queries.neighbors(qi)
+        lo = self.pos[nodes[0]]
+        hi = lo
+        for i in range(1, len(nodes)):
+            p = self.pos[nodes[i]]
+            if p < lo:
+                lo = p
+            elif p > hi:
+                hi = p
+        j = frexp(hi - lo + 1)[1] - 1
+        a = self.rmq[lo, j]
+        b = self.rmq[hi - (1 << j) + 1, j]
+        return self.tour[a if self.depths[a] < self.depths[b] else b]
+
+    return impl
+
+
+@overload_method(LCAType, "ancestor_batch")
+def _ov_ancestor_batch(self, queries):
+    def impl(self, queries):
+        out = np.empty(queries.num_rows(), dtype=NODE_DTYPE)
+        for qi in range(queries.num_rows()):
+            out[qi] = self.ancestor(queries, qi)
+        return out
+
+    return impl
 
 
 def build_lca(tree_csr, root):
-    """Build the :func:`make_lca` structure from a child-CSR tree. A thin Python
+    """Build the :class:`LCA` structure from a child-CSR tree. A thin Python
     wrapper: the heavy passes (``_euler_tour``/``_sparse_table``) are cached
-    kernels; the jitclass itself is constructed here (constructing + returning a
-    jitclass inside a ``cache=True`` kernel would disable its cache)."""
+    kernels; the structref itself is constructed here."""
     tour, depths, pos = _euler_tour(tree_csr, root, tree_csr.num_rows())
     return LCA(tour, depths, pos, _sparse_table(depths))
