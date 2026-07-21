@@ -51,7 +51,7 @@ def main(indptr_path, indices_path, coredecomp, queries_path, output):
         timing.append(end - start)
 
     df = pl.DataFrame({"wall_s": timing})
-    df.write_csv(output, index=False)
+    df.write_csv(output)
 
 
 if __name__ == "__main__":

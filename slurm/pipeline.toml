@@ -431,7 +431,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
   1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
 
 ## warmup_jit
-${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/warmup_jit.py \
+${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/warmup_jit.py
 
 ## python shell-struct building
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-python_build_shell.txt -- \
@@ -453,8 +453,10 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
 ## python steiner querying
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-python_query_steiner.txt -- \
   ${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/query_steiner.py \
-    ${output}/${dataset}/ours-py-v-ib/python_shell \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices32.feather \
+    ${output}/${dataset}/ib-core-decomp/cores.csv \
     ${output}/${dataset}/ours-py-v-ib/query.csv \
-    ${output}/${dataset}/ours-py-v-ib/python_shell_querytimes.csv \
+    ${output}/${dataset}/ours-py-v-ib/python_steiner_querytimes.csv \
   1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
 """

@@ -39,9 +39,7 @@ def main(indptr_path, indices_path, coredecomp, shell_base_path):
         schema_overrides={"core": pl.UInt64},
     ).sort("node_id")
     scores = cores.get_column("core").to_numpy()
-
-    g = Graph.load(graph, format)
-    shell = ShellStruct.build(g, scores)
+    shell = ShellStruct.build(graph, scores)
 
     components_path = pathlib.Path(shell_base_path).with_suffix(".components.feather")
     tree_path = pathlib.Path(shell_base_path).with_suffix(".tree.feather")

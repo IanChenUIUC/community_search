@@ -16,7 +16,7 @@ from commsearch import Graph, ShellStruct, SteinerKCore
 @click.argument("shell_base_path", type=click.Path())
 @click.argument("queries_path", type=click.Path(exists=True, dir_okay=False))
 @click.argument("output", type=click.Path(dir_okay=False))
-def main(graph, format, coredecomp, shell_base_path, queries_path, output):
+def main(shell_base_path, queries_path, output):
     components_path = pathlib.Path(shell_base_path).with_suffix(".components.feather")
     tree_path = pathlib.Path(shell_base_path).with_suffix(".tree.feather")
     shell = ShellStruct.load(components_path, tree_path)
