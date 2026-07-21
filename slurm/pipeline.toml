@@ -297,6 +297,27 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 """
 
+[recipe.shellstruct-strong-scaling]
+params  = { dataset = ["abm14", "cen"] }
+deps    = ["csr-format(dataset=${dataset})"]
+
+stdout  = "${output}/${dataset}/shellstruct-strong-scaling/stdout.txt"
+stderr  = "${output}/${dataset}/shellstruct-strong-scaling/stderr.txt"
+timing  = "${output}/${dataset}/shellstruct-strong-scaling/timing.txt"
+
+command = """
+mkdir -p ${output}/${dataset}/shellstruct-strong-scaling
+export LD_LIBRARY_PATH=$(
+    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+  ):$LD_LIBRARY_PATH
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
+  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/network-stats.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    ${output}/${dataset}/shellstruct-strong-scaling/curve.csv
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
+"""
+
 [recipe.centrality]
 params  = { dataset = ["cen", "abm14"] }
 deps    = ["nk-format(dataset=${dataset})"]
@@ -316,7 +337,6 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
 
 [recipe.icebug-shell-struct]
 array   = true
-slurm   = { mem = "128GB" }
 params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
 deps    = ["csr-format(dataset=${dataset})"]
 
