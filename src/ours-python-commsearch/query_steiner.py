@@ -44,11 +44,12 @@ def main(indptr_path, indices_path, coredecomp, queries_path, output):
         queries = [np.fromstring(line, sep=",") for line in f.readlines()]
 
     timing = []  # wall_s
-    for query in queries:
+    for i, query in enumerate(queries):
         start = time.perf_counter()
         _ = steiner.expand_one_community(query)
         end = time.perf_counter()
         timing.append(end - start)
+        print(f"query {i} took {end - start}s", flush=True)
 
     df = pl.DataFrame({"wall_s": timing})
     df.write_csv(output)

@@ -35,10 +35,10 @@ def main(indptr_path, indices_path, outfile):
 
     rng = np.random.default_rng(1234)
     queries = []
-    for _ in range(50):
+    for _ in range(20):
         queries.append(rng.choice(valid, 1))
-    for _ in range(50):
-        queries.append(rng.choice(valid, 10, replace=False))
+    for _ in range(20):
+        queries.append(rng.choice(valid, 5, replace=False))
 
     with open(outfile, "w") as f:
         f.writelines(",".join(map(str, q)) + "\n" for q in queries)
