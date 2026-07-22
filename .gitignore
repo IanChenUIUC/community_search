@@ -11,6 +11,8 @@ src/**/*.feather
 src/**/*.parquet
 
 !src/ours-python-commsearch/tests/data/*.feather
+!src/gullo-shellstruct/input
+!src/gullo-shellstruct/input/*/*
 
 **/output
 **/output/
