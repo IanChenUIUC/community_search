@@ -3,7 +3,6 @@ import shutil
 import tempfile
 from dataclasses import dataclass
 
-import numba as nb
 import numpy as np
 from numba import njit, uint32
 from numba.core import types
@@ -16,6 +15,7 @@ from .base import (
     _flatten_queries,
 )
 from .graph import CORE_DTYPE, NODE_DTYPE, Graph, _read_column, _write_column
+from .structures.bucketpq import make_bucketpq
 from .structures.community import CommunityBuilder
 from .structures.csr import NB_CORE, NB_NODE
 from .structures.maxheap import make_maxheap
@@ -24,7 +24,7 @@ from .structures.unionfind import SubsetUnionFind
 # comm_id sentinel for a query whose seeds never connect
 _NONE = np.iinfo(NODE_DTYPE).max
 
-_EdgeHeap = make_maxheap(NB_CORE, nb.types.UniTuple(NB_NODE, 2))  # coreness -> (u,w)
+_BucketPQ = make_bucketpq(CORE_DTYPE, NODE_DTYPE)  # vertex frontier, keyed by coreness
 _ReadyHeap = make_maxheap(NB_CORE, uint32)  # key=coreness, val=qID
 _QHIST = types.DictType(uint32, uint32)  # terminals value: qID -> seed count
 
@@ -45,16 +45,9 @@ def _steiner(gcsr, coreness, queries):
     uf = SubsetUnionFind(n)
     visited = np.zeros(n, dtype=np.bool_)
     comm_id = np.full(Q, _NONE, dtype=NODE_DTYPE)
-    edge_pq, ready_pq = _EdgeHeap(), _ReadyHeap()
+    vpq, ready_pq = _BucketPQ(n), _ReadyHeap()
     terminals = Dict.empty(NB_NODE, _QHIST)  # component-root -> (qID -> seed count)
     builder = CommunityBuilder()
-
-    def add_nbrs(v):
-        cv = coreness[v]
-        for w in gcsr.neighbors(v):
-            if not visited[w]:
-                cw = coreness[w]
-                edge_pq.push(cv if cv < cw else cw, (v, w))
 
     def seed(v, q):
         if v not in terminals:
@@ -87,19 +80,22 @@ def _steiner(gcsr, coreness, queries):
             terminals.pop(ru)
         return tu
 
-    def process_edge(k, u, v):
-        if not visited[v]:
-            uf.merge(u, v)
-            visited[v] = True
-            add_nbrs(v)
-            return
-        ru, rv = uf.find(u), uf.find(v)
+    def try_merge(u, w, k):
+        ru, rv = uf.find(u), uf.find(w)
         if ru == rv:
             return
         if ru in terminals or rv in terminals:
-            terminals[uf.merge(u, v)] = merge_terminals(ru, rv, k)
+            terminals[uf.merge(u, w)] = merge_terminals(ru, rv, k)
         else:
-            uf.merge(u, v)
+            uf.merge(u, w)
+
+    def expand(u, k):
+        for w in gcsr.neighbors(u):
+            cw = coreness[w]
+            if cw >= k:
+                try_merge(u, w, k)
+            if not visited[w] and not vpq.contains(w):
+                vpq.insert(min(cw, k), w)
 
     def finalize(k_next, exhausted):
         # Emit a resolved query.
@@ -121,19 +117,18 @@ def _steiner(gcsr, coreness, queries):
         qi = uint32(q)
         for v in queries.neighbors(q):
             seed(v, qi)
-            if not visited[v]:
-                visited[v] = True
-                add_nbrs(v)
+            vpq.insert(coreness[v], v)
 
     nresolved = 0
     while True:
-        if len(edge_pq) > 0:
-            k = edge_pq.peek_key()
-            while len(edge_pq) > 0 and edge_pq.peek_key() == k:
-                kv = edge_pq.pop()
-                process_edge(k, kv[1][0], kv[1][1])
-        exhausted = len(edge_pq) == 0
-        k_next = edge_pq.peek_key() if not exhausted else uint32(0)
+        if len(vpq) > 0:
+            k = vpq.peek_key()
+            while len(vpq) > 0 and vpq.peek_key() == k:
+                _, u = vpq.extract_max()
+                visited[u] = True
+                expand(u, k)
+        exhausted = len(vpq) == 0
+        k_next = vpq.peek_key() if not exhausted else 0
         nresolved += finalize(k_next, exhausted)
         if exhausted or nresolved == Q:
             break
