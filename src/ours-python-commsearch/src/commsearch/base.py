@@ -53,12 +53,20 @@ class SelectiveCommunityDetector(ABC):
     :meth:`_release_handle` for cleanup); the defaults just ship ``self`` by value.
     """
 
-    def run(self, queries) -> list[Community]:
-        """Detect one community per query (each query is a set of seed vertices)."""
+    def run(self, queries, max_batch_size: int = 0) -> list[Community]:
+        """Detect one community per query (each query is a set of seed vertices).
+
+        With ``max_batch_size > 0`` the queries are run in sequential chunks of
+        that size, recording one :attr:`timing` entry per chunk; otherwise the
+        whole batch is one chunk. :attr:`timing` is cleared first."""
         self._timing = []
-        t = perf_counter()
-        out = self._run(queries)
-        self._timing.append(perf_counter() - t)
+        queries = list(queries)
+        bs = max_batch_size if max_batch_size > 0 else (len(queries) or 1)
+        out: list[Community] = []
+        for i in range(0, len(queries), bs):
+            t = perf_counter()
+            out.extend(self._run(queries[i : i + bs]))
+            self._timing.append(perf_counter() - t)
         return out
 
     @abstractmethod
@@ -122,7 +130,7 @@ class SelectiveCommunityDetector(ABC):
         batches = [queries[i : i + batch_size] for i in range(0, n, batch_size)]
 
         if num_threads == 1 or len(batches) == 1:
-            return self.run(queries)
+            return self.run(queries, max_batch_size)
 
         # spawn (not fork): avoids fork-in-multithreaded-process deadlocks; workers
         # reopen the graph zero-copy from the shared handle instead of inheriting it.
