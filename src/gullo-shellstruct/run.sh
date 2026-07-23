@@ -2,6 +2,7 @@
 # Usage: ./run.sh <fully.qualified.MainClass> [args...]
 # Example: ./run.sh main.BuildIndex_PKDDJ Datasets/mygraph.txt
 set -e
+cd "$(dirname "$0")"          # anchor to the project dir so the relative classpath resolves
 CP="target/classes:target/dependency/*"
 MAIN_CLASS="$1"
 shift

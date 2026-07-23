@@ -38,7 +38,7 @@ def main(indptr_path, indices_path, out_directory, query_size, batch_size, reps)
 
     rng = np.random.default_rng(1234)
     query_batches = []
-    for rep in range(20):
+    for rep in range(reps):
         batch = []
         for _ in range(batch_size):
             query = rng.choice(valid, size=query_size, replace=False)

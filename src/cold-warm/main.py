@@ -22,7 +22,7 @@ def _read_column(path: str, column: str) -> pa.Array:
 @click.command()
 @click.argument("indptr_path", type=click.Path(exists=True, dir_okay=False))
 @click.argument("indices_path", type=click.Path(exists=True, dir_okay=False))
-def main(indptr_path, indices_path, shell_base_path):
+def main(indptr_path, indices_path):
     indptr = _read_column(indptr_path, "indptr")
     indices = _read_column(indices_path, "indices")
 

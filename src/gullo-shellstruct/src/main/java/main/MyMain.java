@@ -19,15 +19,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 
-// Usage:
-//   -n <network file> -s <index path> -sk cs|ss
-//   -q <directory containing map.txt, in the "n1,n2,n3 per line" format>
-//   -a <dash-separated algorithms, e.g. gr-con-grcon-gs-ls-core>
-//   -o <output directory>
-//
-// For every query and every algorithm, writes the returned node set to:
-//   <output dir>/<algorithm>/<queryIndex>.txt
-// as a single comma-separated line, e.g. "42,7,100023".
 public class MyMain {
 
     public static void main(String[] args) throws IOException {

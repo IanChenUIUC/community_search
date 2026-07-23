@@ -36,8 +36,7 @@ def main(indptr_path, indices_path, coredecomp, queries_path, output, num_thread
 
     n, m = len(indptr) - 1, len(indices) // 2
     graph = Graph.from_csr(indptr, indices)
-    cores = pl.read_csv(coredecomp, has_header=False, new_columns=["node_id", "core"])
-    cores.sort("node_id")
+    cores = pl.read_csv(coredecomp, has_header=False, new_columns=["node_id", "core"]).sort("node_id")
     scores = cores.get_column("core").to_numpy()
     steiner = SteinerKCore(graph, scores)
     steiner.warmup()

@@ -43,7 +43,7 @@ void indexinputSearch(int argc, char *argv[], bool nodelist)
     ofstream sout(logfile, ios::out | ios::trunc | ios::binary);
 
     int x, y;
-    while (fscanf(fin, "%d %d", &x, &y) != EOF)
+    while (fscanf(fin, "%d", &x) != EOF)
     {
         y = coreness[x];
         cout << "community search: id=" << x << ", k=" << y << endl;
@@ -92,8 +92,8 @@ void printUsage(char *name)
     fprintf(stderr, "Build k-core Index: \n\t"
                     "@maindir is the directory where the output @maindir/kcore_index.txt will be created. "
                     "maindir should end with a '/'. \n\t"
-                    "kcore_index is a two column file (space separated) with node and its core number\n\n"
-                    "@edgelist is two column (tab separated) unweighted graph. "
+                    "kcore_index is a two column file (csv, no header) with node and its core number\n\n"
+                    "@edgelist is two column (csv, with header) unweighted graph. "
                     "The node ids are from 0 to N-1 (memory will be allocated for up to vertex_id_max nodes). \n\t");
 
     fprintf(stderr, "%s -s maindir edgelist indexfile nodes --nodelist\n", name);

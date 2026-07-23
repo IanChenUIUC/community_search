@@ -62,7 +62,7 @@ In which the `src` directory contains the implementations for global search, loc
 The input network is a CSV edgelist, e.g. `input/Datasets/dnc.csv`.
 This should be a simple, unweighted, undirected graph, with a header.
 
-For each method, it requires a list of queries (each query is run independently), e.g. `input/Queries/dnc.csv`.
+For each method, it requires a list of queries (each query is run independently), e.g. `input/Queries/dnc-*.csv`.
 This should have a single line for each query, with each node in that query comma-separated.
 
 ### Outputs

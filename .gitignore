@@ -14,19 +14,21 @@ src/**/*.parquet
 !src/gullo-shellstruct/input
 !src/gullo-shellstruct/input/*/*
 
-**/output
-**/output/
-**/target/
+src/csk-commsearch/main
 
-**/.cache/
-**/__pycache__/
-**/*.py[oc]
-**/build/
-**/dist/
-**/wheels/
-**/*.egg-info
-**/.venv
+output
+output/
+target/
 
-**/.settings
-**/.classpath
-**/.project
+.cache/
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv
+
+.settings
+.classpath
+.project

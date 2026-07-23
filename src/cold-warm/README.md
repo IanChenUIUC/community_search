@@ -13,5 +13,3 @@ This experiment is:
 2. measuring whether this effect is seen from
   - running two jobs back-to-back on the same network
   - running two jobs at the same time on the same network
-
-Conducted on `valhalla`, with `AMD EPYC 7702 64-Core Processor` CPU with 2 sockets and 256GB memory.
