@@ -19,26 +19,40 @@ def _read_column(path: str, column: str) -> pa.Array:
     sys.exit(1)
 
 
+def single_query(graph, valid, size, rng):
+    while True:
+        query = rng.choice(valid, 1)
+
+
 @click.command()
 @click.argument("indptr_path", type=click.Path(exists=True, dir_okay=False))
 @click.argument("indices_path", type=click.Path(exists=True, dir_okay=False))
 @click.argument("outfile", type=click.Path(dir_okay=False))
 def main(indptr_path, indices_path, outfile):
+    rng = np.random.default_rng(1234)
+
     indptr = _read_column(indptr_path, "indptr")
     indices = _read_column(indices_path, "indices")
 
     n, m = len(indptr) - 1, len(indices) // 2
     graph = nk.Graph.fromCSR(n, directed=False, out_indices=indices, out_indptr=indptr)
 
+    cc = nk.components.CoreDecomposition(graph).run()
     deg = nk.centrality.DegreeCentrality(graph).run().scores()
     valid = np.flatnonzero(deg >= np.quantile(deg, 0.99))  # top 1%
 
-    rng = np.random.default_rng(1234)
+    def single_query(size):
+        while True:
+            query = rng.choice(valid, size, replace=False)
+            labels = [cc.componentOfNode(q) for q in query]
+            if all(label == labels[0] for label in labels):
+                return query
+
     queries = []
     for _ in range(20):
-        queries.append(rng.choice(valid, 1))
+        queries.append(single_query(1))
     for _ in range(20):
-        queries.append(rng.choice(valid, 5, replace=False))
+        queries.append(single_query(5))
 
     with open(outfile, "w") as f:
         f.writelines(",".join(map(str, q)) + "\n" for q in queries)

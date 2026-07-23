@@ -242,7 +242,7 @@ class ShellStruct(SelectiveCommunityDetector):
 def _write_ipc(table, path, compression: str) -> None:
     codec = None if compression.lower() in ("none", "") else compression.lower()
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    opts = pa.ipc.IpcWriteOptions(compression=codec)
+    opts = pa.ipc.IpcWriteOptions(compression=codec, allow_64bit=True)
     with pa.OSFile(str(path), "wb") as sink:
         with pa.ipc.new_file(sink, table.schema, options=opts) as writer:
             writer.write_table(table)

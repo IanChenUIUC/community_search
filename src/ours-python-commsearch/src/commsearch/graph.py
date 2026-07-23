@@ -8,7 +8,9 @@ import pyarrow.parquet as pq
 
 NODE_DTYPE = np.dtype(np.uint32)  # vertex & tree-node ids (max ~4B nodes)
 CORE_DTYPE = np.dtype(np.uint32)  # coreness / k values
-OFFSET_DTYPE = np.dtype(np.int64)  # CSR offsets (signed -> no unsigned underflow in numba)
+OFFSET_DTYPE = np.dtype(
+    np.int64
+)  # CSR offsets (signed -> no unsigned underflow in numba)
 
 
 @dataclass(frozen=True)
@@ -118,7 +120,8 @@ def _read_column(path: str | Path, column: str) -> np.ndarray:
 def _write_column(path: str | Path, column: str, arr: np.ndarray, fmt: str) -> None:
     table = pa.table({column: np.ascontiguousarray(arr)})
     if fmt == "feather":
-        with pa.ipc.new_file(str(path), table.schema) as writer:
+        opts = pa.ipc.IpcWriteOptions(allow_64bit=True)
+        with pa.ipc.new_file(str(path), table.schema, options=opts) as writer:
             writer.write_table(table)
     elif fmt == "parquet":
         pq.write_table(table, str(path))
