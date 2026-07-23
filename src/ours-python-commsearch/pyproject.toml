@@ -22,3 +22,6 @@ packages = ["src/commsearch"]
 
 [dependency-groups]
 dev = ["pytest>=8"]
+
+[tool.ruff]
+line-length = 100

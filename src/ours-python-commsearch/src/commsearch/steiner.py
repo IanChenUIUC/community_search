@@ -147,7 +147,7 @@ class SteinerKCore(SelectiveCommunityDetector):
     def __post_init__(self):
         self.coreness = np.ascontiguousarray(self.coreness, dtype=CORE_DTYPE)
 
-    def run(self, queries) -> list[Community]:
+    def _run(self, queries) -> list[Community]:
         q = _flatten_queries(queries, dedup=True)
         comm_id, comm_cor, member_arrays = _steiner(self.graph.csr, self.coreness, q)
         bad = np.nonzero(comm_id == _NONE)[0]

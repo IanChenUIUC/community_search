@@ -2,6 +2,7 @@ import math
 import multiprocessing as mp
 import os
 from abc import ABC, abstractmethod
+from time import perf_counter
 from typing import NamedTuple
 
 import numpy as np
@@ -52,9 +53,23 @@ class SelectiveCommunityDetector(ABC):
     :meth:`_release_handle` for cleanup); the defaults just ship ``self`` by value.
     """
 
-    @abstractmethod
     def run(self, queries) -> list[Community]:
         """Detect one community per query (each query is a set of seed vertices)."""
+        self._timing = []
+        t = perf_counter()
+        out = self._run(queries)
+        self._timing.append(perf_counter() - t)
+        return out
+
+    @abstractmethod
+    def _run(self, queries) -> list[Community]:
+        """Subclass hook: detect one community per query, untimed."""
+
+    @property
+    def timing(self) -> list[float]:
+        """Per-batch runtimes (seconds) of the last ``run``/``run_parallel``;
+        one entry per batch, cleared at the start of each such call."""
+        return getattr(self, "_timing", [])
 
     def warmup(self) -> None:
         """Force njit compilation (and prime the on-disk cache) before heavy use."""
@@ -91,8 +106,8 @@ class SelectiveCommunityDetector(ABC):
 
         Workers are **spawned** (not forked), so a program that calls this from a
         script must guard its entry point with ``if __name__ == "__main__":``
-        (the standard multiprocessing requirement).
         """
+        self._timing = []
         queries = list(queries)
         n = len(queries)
         if n == 0:
@@ -122,8 +137,11 @@ class SelectiveCommunityDetector(ABC):
             self._release_handle(handle)
 
         out: list[Community] = []
-        for res in results:
+        timing: list[float] = []
+        for res, t in results:
             out.extend(res)
+            timing.extend(t)
+        self._timing = timing
         return out
 
 
@@ -144,6 +162,7 @@ def _init_worker(cls, handle) -> None:
     _WORKER_DETECTOR = cls._from_shared_handle(handle)
 
 
-def _run_batch(batch) -> list[Community]:
+def _run_batch(batch) -> tuple[list[Community], list[float]]:
     assert _WORKER_DETECTOR is not None
-    return _WORKER_DETECTOR.run(batch)
+    results = _WORKER_DETECTOR.run(batch)
+    return results, _WORKER_DETECTOR.timing
