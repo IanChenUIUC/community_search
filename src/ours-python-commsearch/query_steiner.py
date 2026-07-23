@@ -20,7 +20,7 @@ def main(indptr_path, indices_path, coredecomp, queries_path, output, num_thread
     cores = pl.read_csv(coredecomp, has_header=False, new_columns=["id", "core"]).sort("id")
     scores = cores.get_column("core").to_numpy()
     steiner = SteinerKCore(graph, scores)
-    steiner.warmup()
+    SteinerKCore.warmup(indptr_dtype=graph.indptr.dtype)
 
     with open(queries_path) as f:
         queries = [np.fromstring(line, sep=",") for line in f.readlines()]

@@ -170,6 +170,10 @@ class ShellStruct(SelectiveCommunityDetector):
         lca = build_lca(tree, root)
         return cls(assign, node_coreness, node_vertices, tree, lca, root)
 
+    @classmethod
+    def _warmup_instance(cls, graph, coreness) -> "ShellStruct":
+        return cls.build(graph, coreness)
+
     def _run(self, queries) -> list[Community]:
         q = _flatten_queries(queries, dedup=False)
         nodes = CSR(q.indptr, self.assign[q.values])  # map seeds -> leaf tree nodes

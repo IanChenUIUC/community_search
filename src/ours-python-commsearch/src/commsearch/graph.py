@@ -107,6 +107,21 @@ class Graph:
         )
 
 
+def make_warmup_graph(
+    indptr_dtype: np.dtype = np.dtype(np.uint64),
+) -> tuple[Graph, np.ndarray]:
+    """A tiny (3-clique + 4-clique) graph and its coreness, for JIT warmup.
+    ``indptr`` is built in ``indptr_dtype`` so a kernel compiled on this graph
+    gets the same CSR specialization the real graph will use (numba dispatches on
+    argument types, not values)."""
+    indptr = np.array([0, 2, 4, 7, 11, 14, 17, 20], dtype=indptr_dtype)
+    indices = np.array(
+        [1, 2, 0, 2, 0, 1, 3, 2, 4, 5, 6, 3, 5, 6, 3, 4, 6, 3, 4, 5], dtype=NODE_DTYPE
+    )
+    coreness = np.array([2, 2, 2, 3, 3, 3, 3], dtype=CORE_DTYPE)
+    return Graph.from_csr(indptr, indices), coreness
+
+
 _PAGE = os.sysconf("SC_PAGE_SIZE") if hasattr(os, "sysconf") else 4096
 
 
@@ -119,8 +134,8 @@ def _prewarm(arr: np.ndarray) -> None:
     that are already resident."""
     if arr.size == 0:
         return
-    epp = max(1, _PAGE // arr.itemsize)  # elements per page
-    int(arr[::epp].sum())  # sequential order -> readahead-friendly
+    epp = max(1, _PAGE // arr.itemsize)
+    int(arr[::epp].sum())
 
 
 def _read_column(path: str | Path, column: str, warm: bool = True) -> np.ndarray:

@@ -180,8 +180,7 @@ class SteinerKCore(SelectiveCommunityDetector):
 
     @classmethod
     def _from_shared_handle(cls, handle: dict) -> "SteinerKCore":
-        # the parent's load_files(warm=True) already warmed the shared page
-        # cache, so workers reopen warm=False rather than each rescan the graph.
+        # parent already warmed the shared page cache; skip re-scanning per worker
         graph = Graph.load(handle["indptr_path"], handle["indices_path"], warm=False)
         coreness = _read_column(handle["coreness"], "coreness")
         return cls(graph, coreness)

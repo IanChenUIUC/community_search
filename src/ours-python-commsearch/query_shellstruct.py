@@ -21,7 +21,7 @@ def main(shell_base_path, queries_path, output, max_batch_size):
     components_path = pathlib.Path(shell_base_path).with_suffix(".components.feather")
     tree_path = pathlib.Path(shell_base_path).with_suffix(".tree.feather")
     shell = ShellStruct.load(components_path, tree_path)
-    shell.warmup()
+    ShellStruct.warmup()
 
     with open(queries_path) as f:
         queries = [np.fromstring(line, sep=",") for line in f.readlines()]

@@ -7,7 +7,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-from .graph import NODE_DTYPE, OFFSET_DTYPE
+from .graph import NODE_DTYPE, OFFSET_DTYPE, make_warmup_graph
 from .structures.csr import CSR
 
 
@@ -79,9 +79,18 @@ class SelectiveCommunityDetector(ABC):
         one entry per batch, cleared at the start of each such call."""
         return getattr(self, "_timing", [])
 
-    def warmup(self) -> None:
-        """Force njit compilation (and prime the on-disk cache) before heavy use."""
-        self.run([np.array([0], dtype=np.int64)])
+    @classmethod
+    def warmup(cls, indptr_dtype: np.dtype = np.dtype(np.uint64)) -> None:
+        """Force njit compilation of this detector's kernels on a tiny synthetic
+        graph. Pass the real graph's ``indptr`` dtype so the compiled CSR
+        specialization matches; ``uint64`` by default."""
+        graph, coreness = make_warmup_graph(indptr_dtype)
+        cls._warmup_instance(graph, coreness).run([np.array([0], dtype=np.int64)])
+
+    @classmethod
+    def _warmup_instance(cls, graph, coreness) -> "SelectiveCommunityDetector":
+        """Throwaway detector for :meth:`warmup`."""
+        return cls(graph, coreness)
 
     def expand_one_community(self, query) -> Community:
         """Community for a single query (an array of one or more seed vertices)."""
@@ -168,6 +177,9 @@ _WORKER_DETECTOR: SelectiveCommunityDetector | None = None
 def _init_worker(cls, handle) -> None:
     global _WORKER_DETECTOR
     _WORKER_DETECTOR = cls._from_shared_handle(handle)
+    # warm off the timed batch; ShellStruct has no .graph (its query is dtype-invariant)
+    g = getattr(_WORKER_DETECTOR, "graph", None)
+    cls.warmup(indptr_dtype=g.indptr.dtype if g is not None else np.dtype(np.uint64))
 
 
 def _run_batch(batch) -> tuple[list[Community], list[float]]:

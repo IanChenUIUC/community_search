@@ -116,3 +116,17 @@ def test_run_parallel_short_circuits(chain343):
     assert chain343.run_parallel([]) == []
     par = chain343.run_parallel([np.array([0]), np.array([4])], num_threads=1)
     assert par[0].coreness == 2 and par[1].coreness == 3
+
+
+def test_warmup_is_classmethod_and_result_transparent(chain343):
+    # a classmethod: callable with no instance, for either indptr width
+    SteinerKCore.warmup(indptr_dtype=np.dtype(np.uint32))
+    SteinerKCore.warmup(indptr_dtype=np.dtype(np.uint64))
+    # warming compiles on a throwaway tiny graph -> real results are unchanged
+    q = [np.array([0]), np.array([4])]
+    before = chain343.run(q)
+    SteinerKCore.warmup(indptr_dtype=chain343.graph.indptr.dtype)
+    after = chain343.run(q)
+    for a, b in zip(before, after):
+        assert a.coreness == b.coreness
+        assert set(a.vertices.tolist()) == set(b.vertices.tolist())
