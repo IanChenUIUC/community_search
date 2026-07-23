@@ -398,7 +398,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
   1> >(tee ${stdout}) 2> >(tee ${stderr})
 
 ## icebug
-vmtouch -t ${input}/${dataset}/indptr.feather ${input}/${dataset}/indices.feather
+vmtouch -t ${input}/${dataset}.indptr.feather ${input}/${dataset}.indices.feather
 
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-icebug_build_shell.txt -- \
   ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
@@ -429,7 +429,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
 
 ## python
 ${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/warmup_jit.py
-vmtouch -t ${input}/${dataset}/indptr.feather ${input}/${dataset}/indices32.feather
+vmtouch -t ${input}/${dataset}.indptr.feather ${input}/${dataset}.indices32.feather
 
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-python_build_shell.txt -- \
   ${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/build_shellstruct.py \
@@ -559,7 +559,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
 [recipe.testing-steiner]
 deps    = ["genquery(dataset=${dataset})", "csr-format(dataset=${dataset})", "ib-core-decomp(dataset=${dataset})"]
 array      = true
-array_axes = ["rep", "size", "batch"]   # one array per dataset (7 × 240) — under MaxArraySize
+array_axes = ["rep", "size", "batch"]
 
 params  = { dataset = ["bitcoin", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"], rep = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"], size = [1, 5, 10, 20], batch = [1, 10, 100] }
 
@@ -572,6 +572,7 @@ mkdir -p ${output}/${dataset}/testing-steiner
 export LD_LIBRARY_PATH=$(
     ${root}/src/ours-python-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
   ):$LD_LIBRARY_PATH
+vmtouch -t ${input}/${dataset}.indptr.feather ${input}/${dataset}.indices32.feather
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
   ${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/query_steiner.py \
     ${input}/${dataset}.indptr.feather \
@@ -609,7 +610,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
 
 [recipe.testing-par-shellstruct-online]
 array      = true
-array_axes = ["rep", "size", "batch"]   # one array per dataset (7 × 240) — under MaxArraySize
+array_axes = ["rep", "size", "batch"]
 params  = { dataset = ["bitcoin", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"], rep = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"], size = [1, 5, 10, 20], batch = [1, 10, 100] }
 deps    = ["testing-par-shellstruct-offline(dataset=${dataset})", "genquery(dataset=${dataset})"]
 slurm   = { cpus = 1 }
@@ -644,12 +645,14 @@ timing  = "${output}/${dataset}/testing-csk/timing"
 
 command = """
 mkdir -p ${output}/${dataset}/testing-csk/n${size}-b${batch}-rep${rep}
+vmtouch -t ${input}/${dataset}.csv
 uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
   ${root}/src/csk-commsearch/main -s \
     ${output}/${dataset}/testing-csk/n${size}-b${batch}-rep${rep}/ \
     ${input}/${dataset}.csv \
     ${output}/${dataset}/ib-core-decomp/cores.csv \
     ${output}/${dataset}/genquery-n${size}-b${batch}-r20/query${rep}.csv \
+    --nodelist \
   1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
 """
 
@@ -674,7 +677,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
 
 [recipe.testing-gullo-shellstruct-online]
 array      = true
-array_axes = ["rep", "size", "batch"]   # one array per dataset (7 × 240) — under MaxArraySize
+array_axes = ["rep", "size", "batch"]
 deps    = ["testing-gullo-shellstruct-offline(dataset=${dataset})", "genquery(dataset=${dataset})"]
 params  = { dataset = ["bitcoin", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"], rep = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"], size = [1, 5, 10, 20], batch = [1, 10, 100] }
 slurm   = { cpus = 1 }

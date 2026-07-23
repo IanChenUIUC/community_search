@@ -157,27 +157,32 @@ class SteinerKCore(SelectiveCommunityDetector):
 
     def _shared_handle(self) -> dict:
         g = self.graph
+        src = g.source
         tmpdir = None
-        if g.source is not None and g.source[1] == "feather":
-            graph_base, graph_fmt = g.source
+        if src is not None and all(str(p).endswith(".feather") for p in src):
+            indptr_path, indices_path = src  # re-mmap the real files (no re-save)
         else:
             tmpdir = tempfile.mkdtemp(dir=_shm_dir())
-            graph_base, graph_fmt = os.path.join(tmpdir, "graph"), "feather"
-            g.save(graph_base, graph_fmt)
+            base = os.path.join(tmpdir, "graph")
+            g.save(base, "feather")
+            indptr_path = f"{base}.indptr.feather"
+            indices_path = f"{base}.indices.feather"
         if tmpdir is None:
             tmpdir = tempfile.mkdtemp(dir=_shm_dir())
         coreness_path = os.path.join(tmpdir, "coreness.feather")
         _write_column(coreness_path, "coreness", self.coreness, "feather")
         return {
-            "graph_base": graph_base,
-            "graph_fmt": graph_fmt,
+            "indptr_path": indptr_path,
+            "indices_path": indices_path,
             "coreness": coreness_path,
             "tmpdir": tmpdir,
         }
 
     @classmethod
     def _from_shared_handle(cls, handle: dict) -> "SteinerKCore":
-        graph = Graph.load(handle["graph_base"], handle["graph_fmt"])
+        # the parent's load_files(warm=True) already warmed the shared page
+        # cache, so workers reopen warm=False rather than each rescan the graph.
+        graph = Graph.load(handle["indptr_path"], handle["indices_path"], warm=False)
         coreness = _read_column(handle["coreness"], "coreness")
         return cls(graph, coreness)
 

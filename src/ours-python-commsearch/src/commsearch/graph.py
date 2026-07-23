@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Self
@@ -26,7 +27,7 @@ class Graph:
 
     indptr: np.ndarray  # uint32 or uint64, len n+1 (offsets)
     indices: np.ndarray  # NODE_DTYPE, neighbor ids (symmetric)
-    # (base, fmt) set by load(). Excluded from equality.
+    # (indptr_path, indices_path) set by load(). Excluded from equality.
     source: tuple[str, str] | None = field(default=None, compare=False)
 
     @property
@@ -67,30 +68,35 @@ class Graph:
         return cls(indptr, indices)
 
     @classmethod
-    def load(cls, base: str | Path, fmt: str = "feather") -> Self:
-        """Load CSR from the sibling files ``<base>.indptr.<fmt>`` and
-        ``<base>.indices.<fmt>`` (each a single-column Arrow table).
+    def load(
+        cls, indptr_path: str | Path, indices_path: str | Path, warm: bool = True
+    ) -> Self:
+        """Load CSR from two explicit single-column Arrow files (any names, e.g.
+        ``<ds>.indices32.feather``).
 
-        For ``feather`` the arrays are zero-copy views over the mmap'd file.
-        Enforces the dtype policy: ``indices`` must be ``NODE_DTYPE`` (uint32),
-        ``indptr`` must be ``uint32`` or ``uint64`` (offsets) — the file's dtype
-        is taken as-is (no cast) so the read stays zero-copy.
+        For ``feather`` the arrays are zero-copy views over the mmap'd file; with
+        ``warm`` (default) each mapping is sequentially prefaulted into page cache
+        before returning, so the subsequent random-order traversal doesn't pay
+        per-page major-fault latency (a ~50x stall on a cold network FS). Enforces
+        the dtype policy: ``indices`` must be ``NODE_DTYPE`` (uint32), ``indptr``
+        ``uint32``|``uint64`` — the file's dtype is taken as-is (zero-copy).
         """
-        base = Path(base)
-        indptr = _read_column(base.parent / f"{base.name}.indptr.{fmt}", "indptr")
-        indices = _read_column(base.parent / f"{base.name}.indices.{fmt}", "indices")
+        indptr = _read_column(indptr_path, "indptr", warm=warm)
+        indices = _read_column(indices_path, "indices", warm=warm)
         if indices.dtype != NODE_DTYPE:
             raise ValueError(f"indices must be {NODE_DTYPE}, got {indices.dtype}")
         if indptr.dtype not in (np.dtype(np.uint32), np.dtype(np.uint64)):
             raise ValueError(f"indptr must be uint32 or uint64, got {indptr.dtype}")
         graph = cls.from_csr(indptr, indices)  # no-op casts -> zero-copy preserved
-        object.__setattr__(graph, "source", (str(base), fmt))  # frozen: bypass
+        object.__setattr__(  # frozen: bypass
+            graph, "source", (str(indptr_path), str(indices_path))
+        )
         return graph
 
     def save(self, base: str | Path, fmt: str = "feather") -> None:
         """Write CSR to the sibling files ``<base>.indptr.<fmt>`` /
         ``<base>.indices.<fmt>`` (single-chunk Arrow tables), re-loadable via
-        :meth:`load`."""
+        :meth:`load` with those two paths."""
         base = Path(base)
         base.parent.mkdir(parents=True, exist_ok=True)
         _write_column(
@@ -101,7 +107,23 @@ class Graph:
         )
 
 
-def _read_column(path: str | Path, column: str) -> np.ndarray:
+_PAGE = os.sysconf("SC_PAGE_SIZE") if hasattr(os, "sysconf") else 4096
+
+
+def _prewarm(arr: np.ndarray) -> None:
+    """Sequentially fault an mmap-backed array into the page cache before the
+    caller's random-order access. A *blocking* touch of one element per page:
+    async ``madvise``/``fadvise`` WILLNEED hints don't complete before the
+    traversal starts (measured — they leave the cold-fault cost intact), so we
+    force the read here. Reads only (keeps zero-copy); a no-op cost on pages
+    that are already resident."""
+    if arr.size == 0:
+        return
+    epp = max(1, _PAGE // arr.itemsize)  # elements per page
+    int(arr[::epp].sum())  # sequential order -> readahead-friendly
+
+
+def _read_column(path: str | Path, column: str, warm: bool = True) -> np.ndarray:
     path = Path(path)
     suffix = path.suffix.lower()
     if suffix == ".feather":  # feather V2 == the Arrow IPC file format
@@ -110,8 +132,11 @@ def _read_column(path: str | Path, column: str) -> np.ndarray:
         col = table.column(column)
         assert col.num_chunks == 1, f"{path} must be stored as a single chunk"
         # zero-copy view over the mmap; the returned array keeps the buffer alive
-        return col.chunk(0).to_numpy(zero_copy_only=True)
-    elif suffix == ".parquet":  # encoded -> a decoded copy (not zero-copy)
+        arr = col.chunk(0).to_numpy(zero_copy_only=True)
+        if warm:
+            _prewarm(arr)
+        return arr
+    elif suffix == ".parquet":  # encoded -> a decoded copy (already resident)
         table = pq.read_table(path)
         return table[column].combine_chunks().to_numpy(zero_copy_only=False)
     raise ValueError(f"unsupported format: {path.suffix} (use feather or parquet)")

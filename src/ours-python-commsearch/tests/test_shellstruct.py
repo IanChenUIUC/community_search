@@ -77,7 +77,7 @@ def chain343():
 
 @pytest.fixture(scope="module")
 def dnc():
-    g = Graph.load(DNC)
+    g = Graph.load(f"{DNC}.indptr.feather", f"{DNC}.indices.feather")
     return g, _core_numbers(g)
 
 
@@ -159,8 +159,12 @@ def test_save_load_roundtrip(tmp_path, dnc):
     for f in ("assign", "node_coreness"):
         assert np.array_equal(getattr(ss, f), getattr(ss2, f)), f
     for f in ("node_vertices", "tree"):
-        assert np.array_equal(getattr(ss, f).indptr, getattr(ss2, f).indptr), f + ".indptr"
-        assert np.array_equal(getattr(ss, f).values, getattr(ss2, f).values), f + ".values"
+        assert np.array_equal(getattr(ss, f).indptr, getattr(ss2, f).indptr), (
+            f + ".indptr"
+        )
+        assert np.array_equal(getattr(ss, f).values, getattr(ss2, f).values), (
+            f + ".values"
+        )
     assert ss.root == ss2.root
 
     rng = np.random.default_rng(1)

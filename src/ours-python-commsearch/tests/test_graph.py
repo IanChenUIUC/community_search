@@ -29,7 +29,9 @@ def test_neighbors_slice_matches_indptr(chain_343):
         assert np.array_equal(chain_343.neighbors(u), chain_343.indices[lo:hi])
 
 
-def _write_csr(base, indptr, indices, fmt, indptr_dtype=np.uint32, indices_dtype=np.uint32):
+def _write_csr(
+    base, indptr, indices, fmt, indptr_dtype=np.uint32, indices_dtype=np.uint32
+):
     ip = pa.table({"indptr": np.asarray(indptr, dtype=indptr_dtype)})
     ix = pa.table({"indices": np.asarray(indices, dtype=indices_dtype)})
     for tbl, name in ((ip, "indptr"), (ix, "indices")):
@@ -43,11 +45,15 @@ def _write_csr(base, indptr, indices, fmt, indptr_dtype=np.uint32, indices_dtype
             pq.write_table(tbl, str(dst))
 
 
+def _load(base, fmt="feather", warm=True):
+    return Graph.load(f"{base}.indptr.{fmt}", f"{base}.indices.{fmt}", warm=warm)
+
+
 @pytest.mark.parametrize("fmt", ["feather", "parquet"])
 def test_load_round_trip(tmp_path, chain_343, fmt):
     base = tmp_path / "g"
     _write_csr(base, chain_343.indptr, chain_343.indices, fmt)
-    loaded = Graph.load(base, fmt=fmt)
+    loaded = _load(base, fmt)
     assert np.array_equal(loaded.indptr, chain_343.indptr)
     assert np.array_equal(loaded.indices, chain_343.indices)
     assert loaded.indptr.dtype == np.uint32 and loaded.indices.dtype == np.uint32
@@ -55,21 +61,25 @@ def test_load_round_trip(tmp_path, chain_343, fmt):
 
 def test_load_accepts_uint64_indptr(tmp_path, chain_343):
     base = tmp_path / "g"
-    _write_csr(base, chain_343.indptr, chain_343.indices, "feather", indptr_dtype=np.uint64)
-    loaded = Graph.load(base)
+    _write_csr(
+        base, chain_343.indptr, chain_343.indices, "feather", indptr_dtype=np.uint64
+    )
+    loaded = _load(base)
     assert loaded.indptr.dtype == np.uint64 and loaded.indices.dtype == np.uint32
     assert np.array_equal(loaded.indices, chain_343.indices)
 
 
 def test_load_rejects_non_uint32_indices(tmp_path, chain_343):
     base = tmp_path / "g"
-    _write_csr(base, chain_343.indptr, chain_343.indices, "feather", indices_dtype=np.uint64)
+    _write_csr(
+        base, chain_343.indptr, chain_343.indices, "feather", indices_dtype=np.uint64
+    )
     with pytest.raises(ValueError, match="indices must be uint32"):
-        Graph.load(base)
+        _load(base)
 
 
 def test_load_dnc_zero_copy():
-    g = Graph.load(DNC)
+    g = _load(DNC)
     assert g.num_nodes == 906
     assert g.num_edges == 10429
     # dtype policy: uint32 columns
