@@ -11,14 +11,6 @@ ROOT = Path("/u/ianchen3/community_search/output")
 
 
 def collect(path, extractor, **param_lists):
-    """
-    Generic driver: iterates the cartesian product of param_lists (kwargs of
-    name -> list of values), builds a path from `path.format(**params)`,
-    and calls extract(file_path, params) -> dict[stat, value] | None.
-    Skips missing files and extraction failures. Returns a list of row
-    dicts, each including all params (e.g. pass method=[...] like any other
-    param, even a single-item list).
-    """
     rows = []
     keys = list(param_lists.keys())
     for combo in it.product(*param_lists.values()):
@@ -147,9 +139,42 @@ steiner_rows = collect(
     r=R,
 )
 
-test_rows = csk_rows + parshell_rows + steiner_rows
+# process-level stats for all three methods; {network}/testing-{method}/timing-n{n}-b{b}-rep{r}.txt
+PROC_STATS = [
+    "exit_code",
+    "cpu_pct",
+    "peak_rss_kb",
+    "peak_rss_anon_kb",
+    "peak_rss_file_kb",
+    "peak_rss_tree_kb",
+    "peak_minflt",
+    "peak_majflt",
+]
+
+csk_proc_rows = collect(
+    f"{ROOT}/{{network}}/testing-{{method}}/timing-n{{n}}-b{{b}}-rep{{r}}.txt",
+    lambda path, params: extract_mytime(path, PROC_STATS),
+    network=TEST_NETWORKS,
+    method=["csk"],
+    n=[1],
+    b=B,
+    r=R,
+)
+
+other_proc_rows = collect(
+    f"{ROOT}/{{network}}/testing-{{method}}/timing-n{{n}}-b{{b}}-rep{{r}}.txt",
+    lambda path, params: extract_mytime(path, PROC_STATS),
+    network=TEST_NETWORKS,
+    method=["par-shellstruct", "steiner"],
+    n=[1, 5, 10, 20],
+    b=B,
+    r=R,
+)
+
+test_rows = csk_rows + parshell_rows + steiner_rows + csk_proc_rows + other_proc_rows
 pd.DataFrame(test_rows).to_csv("testing-commsearch.csv", index=False)
 print(f"Wrote {len(test_rows)} rows to testing-commsearch.csv")
+
 
 ### ===========================================================================
 ### testing: offline preprocessing costs (ib core decomp + par-shellstruct offline)
