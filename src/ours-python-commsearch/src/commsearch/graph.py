@@ -76,10 +76,7 @@ class Graph:
 
         For ``feather`` the arrays are zero-copy views over the mmap'd file; with
         ``warm`` (default) each mapping is sequentially prefaulted into page cache
-        before returning, so the subsequent random-order traversal doesn't pay
-        per-page major-fault latency (a ~50x stall on a cold network FS). Enforces
-        the dtype policy: ``indices`` must be ``NODE_DTYPE`` (uint32), ``indptr``
-        ``uint32``|``uint64`` — the file's dtype is taken as-is (zero-copy).
+        before returning.
         """
         indptr = _read_column(indptr_path, "indptr", warm=warm)
         indices = _read_column(indices_path, "indices", warm=warm)
