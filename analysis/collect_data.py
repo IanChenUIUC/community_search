@@ -138,7 +138,7 @@ parshell_rows = collect(
 
 # Steiner: n = {1,5,10,20}; {network}/testing-steiner/querytimes-n{n}-b{b}-rep{r}.csv
 steiner_rows = collect(
-    "{network}/testing-steiner/querytimes-n{n}-b{b}-rep{r}.csv",
+    f"{ROOT}/{{network}}/testing-steiner/querytimes-n{{n}}-b{{b}}-rep{{r}}.csv",
     extract_querytimes,
     network=TEST_NETWORKS,
     method=["steiner"],
@@ -151,6 +151,27 @@ test_rows = csk_rows + parshell_rows + steiner_rows
 pd.DataFrame(test_rows).to_csv("testing-commsearch.csv", index=False)
 print(f"Wrote {len(test_rows)} rows to testing-commsearch.csv")
 
+### ===========================================================================
+### testing: offline preprocessing costs (ib core decomp + par-shellstruct offline)
+
+offline_ib_rows = collect(
+    f"{ROOT}/{{network}}/ib-core-decomp/timing.txt",
+    lambda path, params: extract_mytime(path, CORE_DECOMP_STATS),
+    network=TEST_NETWORKS,
+    method=["ib-core-decomp"],
+)
+
+offline_parshell_rows = collect(
+    f"{ROOT}/{{network}}/testing-par-shellstruct/offline-timing.txt",
+    lambda path, params: extract_mytime(path, CORE_DECOMP_STATS),
+    network=TEST_NETWORKS,
+    method=["par-shellstruct-offline"],
+)
+
+offline_rows = offline_ib_rows + offline_parshell_rows
+pd.DataFrame(offline_rows).to_csv("testing-offline.csv", index=False)
+print(f"Wrote {len(offline_rows)} rows to testing-offline.csv")
+
 
 ## data manually collected:
 # - gullo shellstruct did not finish on everything
@@ -159,4 +180,3 @@ print(f"Wrote {len(test_rows)} rows to testing-commsearch.csv")
 # - network statistics
 # - comparison of ours-py-v-ib
 # - analysis of centrality and queries
-# - testing offline stages (icebug core-decomp and shellstruct)
