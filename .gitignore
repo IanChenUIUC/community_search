@@ -10,9 +10,11 @@ src/**/*.csv
 src/**/*.feather
 src/**/*.parquet
 
-!src/ours-python-commsearch/tests/data/*.feather
+!src/ours-python-commsearch/tests/data/dnc*
 !src/gullo-shellstruct/input
 !src/gullo-shellstruct/input/*/*
+!src/commsearch-abm272/input
+!src/commsearch-abm272/input/*
 
 src/csk-commsearch/main
 
