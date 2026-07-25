@@ -1,6 +1,5 @@
-import sys
 import pathlib
-import time
+import itertools as it
 
 import click
 import numpy as np
@@ -9,34 +8,66 @@ import pyarrow as pa
 import pyarrow.feather as pf
 import pyarrow.parquet as pq
 
-from commsearch import Graph, ShellStruct, SteinerKCore
+from commsearch import Graph, ShellStruct, SteinerKCore, Community
+
+"""
+report the statistics of the community and writes to the output
+    - coreness
+    - number of nodes
+    - histogram of diferent fields
+TODO: compute real statistics, e.g. diameter, conductance, density, etc.
+"""
+
+field_codes = [
+    "math",
+    "physics",
+    "chemistry",
+    "bio",
+    "scientometrics",
+    "math|physics",
+    "math|chemistry",
+    "math|bio",
+    "math|scientometrics",
+    "physics|chemistry",
+    "physics|bio",
+    "physics|scientometrics",
+    "chemistry|bio",
+    "chemistry|scientometrics",
+    "bio|scientometrics",
+]
 
 
 @click.command()
-@click.argument("shell_base_path", type=click.Path())
-@click.argument("queries_path", type=click.Path(exists=True, dir_okay=False))
-@click.argument("output", type=click.Path(dir_okay=False))
-@click.option("-b", "--max_batch_size", type=int, default=1)
-def main(shell_base_path, queries_path, output, max_batch_size):
-    components_path = pathlib.Path(shell_base_path).with_suffix(".components.feather")
-    tree_path = pathlib.Path(shell_base_path).with_suffix(".tree.feather")
-    shell = ShellStruct.load(components_path, tree_path)
+@click.argument("working_dir", type=click.Path(exists=True, file_okay=False))
+@click.argument("all_nodelist", type=click.Path(exists=True, dir_okay=False))
+@click.argument("seed_nodelist", type=click.Path(exists=True, dir_okay=False))
+def main(working_dir, all_nodelist, seed_nodelist):
     ShellStruct.warmup()
+    working_dir = pathlib.Path(working_dir)
 
-    with open(queries_path) as f:
-        queries = [np.fromstring(line, sep=",") for line in f.readlines()]
+    nodes = pl.read_csv(all_nodelist)
+    seeds = pl.read_csv(seed_nodelist)
+    queries = [[q] for q in seeds.filter(pl.col("role") == "founder").get_column("integer_id")]
 
-    start = time.perf_counter()
-    shell.run_parallel(queries, num_threads=1, max_batch_size=max_batch_size)
-    end = time.perf_counter()
+    schema = ["year", "query", "key", "value"]
+    data = []
 
-    timing = shell.timing
-    index = [str(x) for x in range(len(timing))]
-    timing.append(end - start)
-    index.append("all")
+    for year in range(2026, nodes.get_column("year").max() + 1):
+        components = working_dir / str(year) / "shell.components.feather"
+        tree = working_dir / str(year) / "shell.tree.feather"
+        shell = ShellStruct.load(components, tree)
 
-    df = pl.DataFrame({"index": index, "wall_s": timing})
-    df.write_csv(output)
+        for query in queries:
+            coreness, comm = shell.expand_one_community(query)
+            data.append([year, query[0], "coreness", coreness])
+
+            fields = nodes.filter(pl.col("node_id").is_in(comm)).get_column("field")
+            counts = np.bincount(fields, minlength=15)
+            for key, value in zip(field_codes, counts):
+                data.append([year, query[0], key, value])
+
+    df = pl.DataFrame(data, schema=schema, orient="row")
+    df.write_csv(working_dir / "comm-evolve-stats.csv")
 
 
 if __name__ == "__main__":
