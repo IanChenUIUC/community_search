@@ -26,13 +26,14 @@ def _read_column(path: str, column: str) -> pa.Array:
 @click.argument("indices_path", type=click.Path(exists=True, dir_okay=False))
 @click.argument("queries_path", type=click.Path(exists=True, dir_okay=False))
 @click.argument("output", type=click.Path(dir_okay=False))
-def main(indptr_path, indices_path, queries_path, output):
+@click.option("--with-upper", "-u", is_flag=True)
+def main(indptr_path, indices_path, queries_path, output, with_upper):
     indptr = _read_column(indptr_path, "indptr")
     indices = _read_column(indices_path, "indices")
 
     n, m = len(indptr) - 1, len(indices) // 2
     graph = nk.Graph.fromCSR(n, directed=False, out_indices=indices, out_indptr=indptr)
-    local = nk.scd.LocalKCore(graph)
+    local = nk.scd.LocalKCore(graph, tightenUpper=with_upper)
 
     with open(queries_path) as f:
         queries = [set(map(int, line.split(","))) for line in f.readlines()]

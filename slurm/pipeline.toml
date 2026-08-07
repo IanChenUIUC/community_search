@@ -890,7 +890,7 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
   1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
 """
 
-[recipe.training-local-steiner-shell]
+[recipe.training-steiner-shell]
 slurm   = { cpus = 16 }
 array   = true
 params  = { dataset = ["abm14", "cen"] }
@@ -965,21 +965,92 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
     ${output}/${dataset}/training-local-steiner-shell/genquery-n10-b20-r1/query0.csv \
     ${output}/${dataset}/training-local-steiner-shell/steiner-querytimes-n10.csv \
   1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+"""
 
-## local online
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-local-n1.txt -- \
+[recipe.training-local]
+slurm      = { cpus = 16 }
+array      = true
+array_axes = ["rep"]
+params  = { dataset = ["abm14", "cen"], rep = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"] }
+deps    = ["csr-format(dataset=${dataset})", "training-genquery(dataset=${dataset})"]
+
+stdout  = "${output}/${dataset}/training-local-steiner-shell/local-stdout-rep${rep}.txt"
+stderr  = "${output}/${dataset}/training-local-steiner-shell/local-stderr-rep${rep}.txt"
+timing  = "${output}/${dataset}/training-local-steiner-shell/timing"
+
+command = """
+mkdir -p ${output}/${dataset}/training-local-steiner-shell
+export LD_LIBRARY_PATH=$(
+    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+  ):$LD_LIBRARY_PATH
+
+vmtouch -t ${input}/${dataset}.indptr.feather ${input}/${dataset}.indices.feather
+
+tmp=$(mktemp -d)
+
+## local online -- one query (row ${rep} of the 20-query batch) per job
+sed -n "$((${rep} + 1))p" \
+  ${output}/${dataset}/training-local-steiner-shell/genquery-n1-b20-r1/query0.csv > $tmp/query-n1.csv
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-local-n1-rep${rep}.txt -- \
   ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_local.py \
     ${input}/${dataset}.indptr.feather \
     ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/training-local-steiner-shell/genquery-n1-b20-r1/query0.csv \
-    ${output}/${dataset}/training-local-steiner-shell/local-querytimes-n1.csv \
+    $tmp/query-n1.csv \
+    ${output}/${dataset}/training-local-steiner-shell/local-querytimes-n1-rep${rep}.csv \
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
+
+sed -n "$((${rep} + 1))p" \
+  ${output}/${dataset}/training-local-steiner-shell/genquery-n10-b20-r1/query0.csv > $tmp/query-n10.csv
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-local-n10-rep${rep}.txt -- \
+  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_local.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    $tmp/query-n10.csv \
+    ${output}/${dataset}/training-local-steiner-shell/local-querytimes-n10-rep${rep}.csv \
   1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+"""
 
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-local-n10.txt -- \
+[recipe.training-local-upper]
+slurm      = { cpus = 16 }
+array      = true
+array_axes = ["rep"]
+params  = { dataset = ["abm14", "cen"], rep = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"] }
+deps    = ["csr-format(dataset=${dataset})", "training-genquery(dataset=${dataset})"]
+
+stdout  = "${output}/${dataset}/training-local-steiner-shell/local-upper-stdout-rep${rep}.txt"
+stderr  = "${output}/${dataset}/training-local-steiner-shell/local-upper-stderr-rep${rep}.txt"
+timing  = "${output}/${dataset}/training-local-steiner-shell/timing"
+
+command = """
+mkdir -p ${output}/${dataset}/training-local-steiner-shell
+export LD_LIBRARY_PATH=$(
+    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+  ):$LD_LIBRARY_PATH
+
+vmtouch -t ${input}/${dataset}.indptr.feather ${input}/${dataset}.indices.feather
+
+tmp=$(mktemp -d)
+
+## local online -- one query (row ${rep} of the 20-query batch) per job
+sed -n "$((${rep} + 1))p" \
+  ${output}/${dataset}/training-local-steiner-shell/genquery-n1-b20-r1/query0.csv > $tmp/query-n1.csv
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-local-upper-n1-rep${rep}.txt -- \
   ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_local.py \
     ${input}/${dataset}.indptr.feather \
     ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/training-local-steiner-shell/genquery-n10-b20-r1/query0.csv \
-    ${output}/${dataset}/training-local-steiner-shell/local-querytimes-n10.csv \
+    $tmp/query-n1.csv \
+    ${output}/${dataset}/training-local-steiner-shell/local-upper-querytimes-n1-rep${rep}.csv \
+    -u \
+  1> >(tee ${stdout}) 2> >(tee ${stderr})
+
+sed -n "$((${rep} + 1))p" \
+  ${output}/${dataset}/training-local-steiner-shell/genquery-n10-b20-r1/query0.csv > $tmp/query-n10.csv
+uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-local-upper-n10-rep${rep}.txt -- \
+  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_local.py \
+    ${input}/${dataset}.indptr.feather \
+    ${input}/${dataset}.indices.feather \
+    $tmp/query-n10.csv \
+    ${output}/${dataset}/training-local-steiner-shell/local-upper-querytimes-n10-rep${rep}.csv \
+    -u \
   1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
 """
