@@ -3,12 +3,14 @@ import pathlib
 import time
 
 import click
-import networkit as nk
 import numpy as np
 import polars as pl
 import pyarrow as pa
 import pyarrow.feather as pf
 import pyarrow.parquet as pq
+
+import networkit as nk
+from networkit.graph import InducedSubgraphView
 
 
 def _read_column(path: str, column: str) -> pa.Array:
@@ -41,10 +43,17 @@ def main(indptr_path, indices_path, queries_path, output, with_upper):
     timing = []  # wall_s
     for i, query in enumerate(queries):
         start = time.perf_counter()
-        _ = local.expandOneCommunity(query)
+        comm = local.expandOneCommunity(query)
         end = time.perf_counter()
         timing.append(end - start)
         print(f"query {i} took {end - start}s", flush=True)
+
+        subg = InducedSubgraphView(graph).addNodes(list(comm)).asGraph()
+        et_vol = local.getTriggerStats()[-1]["outVolume"]
+        gt_vol = subg.numberOfEdges() * 2
+        et_size = local.getTriggerStats()[-1]["maxCandidates"]
+        gt_size = subg.numberOfNodes()
+        print(f"STATS: {(et_size / gt_size)=} {(gt_vol / et_vol)=}")
 
     df = pl.DataFrame({"wall_s": timing})
     df.write_csv(output)
