@@ -10,3 +10,7 @@
 	path = src/ucrparlay-core-decomposition
 	url = https://github.com/IanChenUIUC/Parallel-KCore
 	branch = persist-kcore
+[submodule "slurm/cc-slurm"]
+	path = slurm/cc-slurm
+	url = https://github.com/IanChenUIUC/cc-slurm.git
+	branch = main
