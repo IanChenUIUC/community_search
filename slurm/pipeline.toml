@@ -5,122 +5,155 @@ time = "4:00:00"
 partition = "secondary"
 
 [defaults]
-# root = "/models/ianchen3/community_search"
-root = "/u/ianchen3/community_search"
-input = "${root}/input"
+root   = "/u/ianchen3/community_search"
+input  = "${root}/input"
 output = "${root}/output"
 
+all      = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster",
+            "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"]
+testing  = ["bitcoin", "dbpedia_link", "friendster", "livejournal",
+            "microsoft_concept", "twitter_social", "wikipedia_link"]
+training = ["abm14", "cen"]
+
+util     = "${root}/src/utilities"
+icebug   = "${root}/src/ours-icebug-commsearch"
+pycs     = "${root}/src/ours-python-commsearch"
+genq     = "${root}/src/gen-query"
+nkit     = "${root}/src/networkit-core-decomposition"
+gbbs     = "${root}/src/gbbs-core-decomposition"
+gullo    = "${root}/src/gullo-shellstruct"
+
+mytime = "uv run --project ${util} ${util}/mytime.py"
+
+ld_icebug = """
+export LD_LIBRARY_PATH=$(
+    ${icebug}/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+  ):$LD_LIBRARY_PATH"""
+ld_pycs = """
+export LD_LIBRARY_PATH=$(
+    ${pycs}/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+  ):$LD_LIBRARY_PATH"""
+
 [recipe.build]
-stdout  = "${output}/build.out"
-stderr  = "${output}/build.err"
-timing  = "${output}/build.resources"
+stdout = "${output}/build.out"
+stderr = "${output}/build.err"
+timing = "${output}/build.resources"
 
 command = """
 mkdir -p ${input}
 mkdir -p ${output}
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- bash -c "
-  cd ${root}/src/gbbs-core-decomposition && bazel build //...
+${mytime} -o ${timing} -- bash -c "
+  cd ${gbbs} && bazel build //...
   cd ${root}/src/ucrparlay-core-decomposition/KCore && make
   cd ${root}/src/pkc-core-decomposition && make
   cd ${root}/src/csk-commsearch && make
-  cd ${root}/src/gullo-shellstruct && mvn compile
-  cd ${root}/src/utilities && uv sync
-  cd ${root}/src/lbug-core-decomposition && uv sync
-  cd ${root}/src/networkit-core-decomposition && uv sync
-  cd ${root}/src/ours-icebug-commsearch && uv sync
-  cd ${root}/src/ours-python-commsearch && uv sync
-  cd ${root}/src/gen-query && uv sync
-  cd ${root}/src/commsearch-abm272 && uv sync
-" 1> ${stdout} 2> ${stderr} 
+  cd ${gullo} && mvn compile
+  cd ${util} && uv sync
+  cd ${nkit} && uv sync
+  cd ${icebug} && uv sync
+  cd ${pycs} && uv sync
+  cd ${genq} && uv sync
+" 1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
 [recipe.gbbs-format]
-array   = true
-slurm   = { mem = "256GB" }
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["build"]
+array  = true
+slurm  = { mem = "256GB" }
+params = { dataset = "all" }
+deps   = ["build"]
 
-stdout  = "${output}/${dataset}/gbbs-format/stdout.txt"
-stderr  = "${output}/${dataset}/gbbs-format/stderr.txt"
-timing  = "${output}/${dataset}/gbbs-format/timing.txt"
+dir    = "${output}/${dataset}/gbbs-format"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+adj    = "${input}/${dataset}.gbbs.adj"
+bin    = "${input}/${dataset}.gbbs.bin"
 
 command = """
-mkdir -p ${output}/${dataset}/gbbs-format
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/utilities/csv2gbbs.sh  \
+mkdir -p ${dir}
+${mytime} -o ${timing} -- \
+  ${util}/csv2gbbs.sh  \
     ${input}/${dataset}.csv \
-    ${input}/${dataset}.gbbs.adj \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  ${root}/src/gbbs-core-decomposition/bazel-bin/utils/converter -s -enc binary \
-    -o ${input}/${dataset}.gbbs.bin \
-    ${input}/${dataset}.gbbs.adj \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+    ${adj} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+${mytime} -a -o ${timing} -- \
+  ${gbbs}/bazel-bin/utils/converter -s -enc binary \
+    -o ${bin} \
+    ${adj} \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr} >&2)
 """
 
 [recipe.pkc-format]
-array   = true
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["build"]
+array  = true
+params = { dataset = "all" }
+deps   = ["build"]
 
-stdout  = "${output}/${dataset}/pkc-format/stdout.txt"
-stderr  = "${output}/${dataset}/pkc-format/stderr.txt"
-timing  = "${output}/${dataset}/pkc-format/timing.txt"
+dir    = "${output}/${dataset}/pkc-format"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+adj    = "${input}/${dataset}.pkc.adj"
 
 command = """
-mkdir -p ${output}/${dataset}/pkc-format
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/utilities/csv2pkc.sh  \
+mkdir -p ${dir}
+${mytime} -o ${timing} -- \
+  ${util}/csv2pkc.sh  \
     ${input}/${dataset}.csv \
-    ${input}/${dataset}.pkc.adj \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
+    ${adj} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
 [recipe.nk-format]
-array   = true
-# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-params  = { dataset = ["abm14", "cen"] }
-deps    = ["build"]
+array  = true
+params = { dataset = "training" }
+deps   = ["build"]
 
-stdout  = "${output}/${dataset}/nk-format/stdout.txt"
-stderr  = "${output}/${dataset}/nk-format/stderr.txt"
-timing  = "${output}/${dataset}/nk-format/timing.txt"
+dir    = "${output}/${dataset}/nk-format"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+bin    = "${input}/${dataset}.nk.bin"
 
 command = """
-mkdir -p ${output}/${dataset}/nk-format
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/networkit-core-decomposition/.venv/bin/python ${root}/src/networkit-core-decomposition/csv2nk.py \
+mkdir -p ${dir}
+${mytime} -o ${timing} -- \
+  ${nkit}/.venv/bin/python ${nkit}/csv2nk.py \
     --edgelist ${input}/${dataset}.csv \
-    --output ${input}/${dataset}.nk.bin \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
+    --output ${bin} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
 [recipe.csr-format]
-array   = true
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["build"]
+array  = true
+params = { dataset = "all" }
+deps   = ["build"]
+slurm  = { cpus = 1 }
 
-stdout  = "${output}/${dataset}/csr-format/stdout.txt"
-stderr  = "${output}/${dataset}/csr-format/stderr.txt"
-timing  = "${output}/${dataset}/csr-format/timing.txt"
+dir       = "${output}/${dataset}/csr-format"
+stdout    = "${dir}/stdout.txt"
+stderr    = "${dir}/stderr.txt"
+timing    = "${dir}/timing.txt"
+indptr    = "${input}/${dataset}.indptr.feather"
+indices   = "${input}/${dataset}.indices.feather"
+indices32 = "${input}/${dataset}.indices32.feather"
 
 command = """
-mkdir -p ${output}/${dataset}/csr-format
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/utilities/.venv/bin/python ${root}/src/utilities/csv2csr.py  \
+mkdir -p ${dir}
+${mytime} -o ${timing} -- \
+  ${util}/.venv/bin/python ${util}/csv2csr.py  \
     ${input}/${dataset}.csv \
     ${input}/${dataset} \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  ${root}/src/utilities/.venv/bin/python ${root}/src/utilities/pq2pf.py -w 32 \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+${mytime} -a -o ${timing} -- \
+  ${util}/.venv/bin/python ${util}/pq2pf.py -w 32 \
     ${input}/${dataset}.indices.parquet \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-mv ${input}/${dataset}.indices.feather ${input}/${dataset}.indices32.feather
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  ${root}/src/utilities/.venv/bin/python ${root}/src/utilities/pq2pf.py \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr} >&2)
+mv ${indices} ${indices32}
+${mytime} -a -o ${timing} -- \
+  ${util}/.venv/bin/python ${util}/pq2pf.py \
     ${input}/${dataset}.indptr.parquet \
     ${input}/${dataset}.indices.parquet \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr}) 
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr} >&2)
 """
 
 ### Removing Ladybug from the experiment
@@ -140,71 +173,76 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${t
 #     ${input}/${dataset}.csv \
 #     ${input}/${dataset}.lbug \
 #     --no-symmetrize \
-#   1> >(tee ${stdout}) 2> >(tee ${stderr})
+#   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 # """
 
-[recipe.gbbs-core-decomp]
-array   = true
-# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-params  = { dataset = ["abm14", "cen"] }
-deps    = ["gbbs-format(dataset=${dataset})"]
-slurm   = { cpus = 16, exclusive = true }
+[recipe.traincd-gbbs-core-decomp]
+array  = true
+params = { dataset = "training" }
+deps   = ["gbbs-format(dataset=${dataset})"]
+slurm  = { cpus = 16, exclusive = true }
 
-stdout  = "${output}/${dataset}/gbbs-core-decomp/stdout.txt"
-stderr  = "${output}/${dataset}/gbbs-core-decomp/stderr.txt"
-timing  = "${output}/${dataset}/gbbs-core-decomp/timing.txt"
+dir    = "${output}/${dataset}/traincd-gbbs-core-decomp"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+cores  = "${dir}/cores.csv"
 
 command = """
-mkdir -p ${output}/${dataset}/gbbs-core-decomp
+mkdir -p ${dir}
 export PARLAY_NUM_THREADS=${slurm.cpus}
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/gbbs-core-decomposition/bazel-bin/benchmarks/KCore/JulienneDBS17/KCore_main -s -b -rounds 1 \
-    -o ${output}/${dataset}/gbbs-core-decomp/cores.csv \
-    ${input}/${dataset}.gbbs.bin \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
+${mytime} -o ${timing} -- \
+  ${gbbs}/bazel-bin/benchmarks/KCore/JulienneDBS17/KCore_main -s -b -rounds 1 \
+    -o ${cores} \
+    ${gbbs-format.bin} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
-[recipe.ucr-core-decomp]
-array   = true
-# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-params  = { dataset = ["abm14", "cen"] }
-deps    = ["gbbs-format(dataset=${dataset})"]
-slurm   = { cpus = 16, exclusive = true }
+[recipe.traincd-ucr-core-decomp]
+array  = true
+params = { dataset = "training" }
+deps   = ["gbbs-format(dataset=${dataset})"]
+slurm  = { cpus = 16, exclusive = true }
 
-stdout  = "${output}/${dataset}/ucr-core-decomp/stdout.txt"
-stderr  = "${output}/${dataset}/ucr-core-decomp/stderr.txt"
-timing  = "${output}/${dataset}/ucr-core-decomp/timing.txt"
+dir    = "${output}/${dataset}/traincd-ucr-core-decomp"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+cores  = "${dir}/cores.csv"
+ucr    = "${root}/src/ucrparlay-core-decomposition"
 
 command = """
-mkdir -p ${output}/${dataset}/ucr-core-decomp
+mkdir -p ${dir}
 export PARLAY_NUM_THREADS=${slurm.cpus}
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/ucrparlay-core-decomposition/KCore/kcore -s \
-    -i ${input}/${dataset}.gbbs.bin \
-    -o ${output}/${dataset}/ucr-core-decomp/cores.csv \
+${mytime} -o ${timing} -- \
+  ${ucr}/KCore/kcore -s \
+    -i ${gbbs-format.bin} \
+    -o ${cores} \
     -l ${stdout} \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
-[recipe.pkc-core-decomp]
-array   = true
-# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-params  = { dataset = ["abm14", "cen"] }
-deps    = ["pkc-format(dataset=${dataset})"]
-slurm   = { cpus = 16, exclusive = true }
+[recipe.traincd-pkc-core-decomp]
+array  = true
+params = { dataset = "training" }
+deps   = ["pkc-format(dataset=${dataset})"]
+slurm  = { cpus = 16, exclusive = true }
 
-stdout  = "${output}/${dataset}/pkc-core-decomp/stdout.txt"
-stderr  = "${output}/${dataset}/pkc-core-decomp/stderr.txt"
-timing  = "${output}/${dataset}/pkc-core-decomp/timing.txt"
+dir    = "${output}/${dataset}/traincd-pkc-core-decomp"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+cores  = "${dir}/cores.csv"
+pkc    = "${root}/src/pkc-core-decomposition"
 
 command = """
-mkdir -p ${output}/${dataset}/pkc-core-decomp
+mkdir -p ${dir}
 export OMP_NUM_THREADS=${slurm.cpus}
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/pkc-core-decomposition/pkc.exe \
-    ${input}/${dataset}.pkc.adj \
-    ${output}/${dataset}/pkc-core-decomp/cores.csv \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
+${mytime} -o ${timing} -- \
+  ${pkc}/pkc.exe \
+    ${pkc-format.adj} \
+    ${cores} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
 ### removing Ladybug from the experiment
@@ -224,833 +262,370 @@ uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timi
 #     ${input}/${dataset}.lbug.indptr.parquet \
 #     ${input}/${dataset}.lbug.indices.parquet \
 #     ${output}/${dataset}/lbug-core-decomp/cores.csv \
-#   1> >(tee ${stdout}) 2> >(tee ${stderr})
+#   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 # """
 
-[recipe.nk-core-decomp]
-array   = true
-# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-params  = { dataset = ["abm14", "cen"] }
-deps    = ["nk-format(dataset=${dataset})"]
-slurm   = { cpus = 16, exclusive = true }
+[recipe.traincd-nk-core-decomp]
+array  = true
+params = { dataset = "training" }
+deps   = ["nk-format(dataset=${dataset})"]
+slurm  = { cpus = 16, exclusive = true }
 
-stdout  = "${output}/${dataset}/nk-core-decomp/stdout.txt"
-stderr  = "${output}/${dataset}/nk-core-decomp/stderr.txt"
-timing  = "${output}/${dataset}/nk-core-decomp/timing.txt"
+dir    = "${output}/${dataset}/traincd-nk-core-decomp"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+cores  = "${dir}/cores.csv"
 
 command = """
-mkdir -p ${output}/${dataset}/nk-core-decomp
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/networkit-core-decomposition/.venv/bin/python ${root}/src/networkit-core-decomposition/main.py \
-    --graph ${input}/${dataset}.nk.bin \
-    --output ${output}/${dataset}/nk-core-decomp/cores.csv \
+mkdir -p ${dir}
+${mytime} -o ${timing} -- \
+  ${nkit}/.venv/bin/python ${nkit}/main.py \
+    --graph ${nk-format.bin} \
+    --output ${cores} \
     --threads ${slurm.cpus} \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
-[recipe.ib-core-decomp]
-array   = true
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["csr-format(dataset=${dataset})"]
-slurm   = { cpus = 16, exclusive = true }
+[recipe.icebug-core-decomp]
+array  = true
+params = { dataset = "all" }
+deps   = ["csr-format(dataset=${dataset})"]
+slurm  = { cpus = 16, exclusive = true }
 
-stdout  = "${output}/${dataset}/ib-core-decomp/stdout.txt"
-stderr  = "${output}/${dataset}/ib-core-decomp/stderr.txt"
-timing  = "${output}/${dataset}/ib-core-decomp/timing.txt"
+dir    = "${output}/${dataset}/icebug-core-decomp"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+cores  = "${dir}/cores.csv"
 
 command = """
-mkdir -p ${output}/${dataset}/ib-core-decomp
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/core_decomposition.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/ib-core-decomp/cores.csv \
+mkdir -p ${dir}
+${ld_icebug}
+${mytime} -o ${timing} -- \
+  ${icebug}/.venv/bin/python ${icebug}/core_decomposition.py \
+    ${csr-format.indptr} \
+    ${csr-format.indices} \
+    ${cores} \
     --threads ${slurm.cpus} \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
 [recipe.network-stats]
-array   = true
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["csr-format(dataset=${dataset})"]
+array  = true
+params = { dataset = "all" }
+deps   = ["csr-format(dataset=${dataset})"]
 
-stdout  = "${output}/${dataset}/network-stats/stdout.txt"
-stderr  = "${output}/${dataset}/network-stats/stderr.txt"
-timing  = "${output}/${dataset}/network-stats/timing.txt"
-
-command = """
-mkdir -p ${output}/${dataset}/network-stats
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/network-stats.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
-"""
-
-[recipe.shellstruct-strong-scaling]
-params  = { dataset = ["abm14", "cen"] }
-deps    = ["csr-format(dataset=${dataset})"]
-slurm   = { cpus = 64, exclusive = true }
-
-stdout  = "${output}/${dataset}/shellstruct-strong-scaling/stdout.txt"
-stderr  = "${output}/${dataset}/shellstruct-strong-scaling/stderr.txt"
-timing  = "${output}/${dataset}/shellstruct-strong-scaling/timing.txt"
+dir    = "${output}/${dataset}/network-stats"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
 
 command = """
-mkdir -p ${output}/${dataset}/shellstruct-strong-scaling
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/shellstruct_strong_scaling.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/shellstruct-strong-scaling/curve.csv
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
+mkdir -p ${dir}
+${ld_icebug}
+${mytime} -o ${timing} -- \
+  ${icebug}/.venv/bin/python ${icebug}/network-stats.py \
+    ${csr-format.indptr} \
+    ${csr-format.indices} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
 [recipe.centrality]
-params  = { dataset = ["cen", "abm14"] }
-deps    = ["nk-format(dataset=${dataset})"]
+params = { dataset = "training" }
+deps   = ["nk-format(dataset=${dataset})"]
 
-stdout  = "${output}/${dataset}/centrality/stdout.txt"
-stderr  = "${output}/${dataset}/centrality/stderr.txt"
-timing  = "${output}/${dataset}/centrality/timing.txt"
+dir    = "${output}/${dataset}/centrality"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+result = "${dir}/centrality.csv"
 
 command = """
-mkdir -p ${output}/${dataset}/centrality
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/networkit-core-decomposition/.venv/bin/python ${root}/src/networkit-core-decomposition/centrality.py \
-    --graph ${input}/${dataset}.nk.bin \
-    --output ${output}/${dataset}/centrality/centrality.csv \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
+mkdir -p ${dir}
+${mytime} -o ${timing} -- \
+  ${nkit}/.venv/bin/python ${nkit}/centrality.py \
+    --graph ${nk-format.bin} \
+    --output ${result} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
-[recipe.query-analysis]
-array   = true
-params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["csr-format(dataset=${dataset})"]
+[recipe.icebug-shellstruct]
+array  = true
+params = { dataset = "all" }
+deps   = ["csr-format(dataset=${dataset})"]
 
-stdout  = "${output}/${dataset}/query-analysis/stdout.txt"
-stderr  = "${output}/${dataset}/query-analysis/stderr.txt"
-timing  = "${output}/${dataset}/query-analysis/timing.txt"
+dir    = "${output}/${dataset}/icebug-shellstruct"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+shell  = "${dir}/shell"
 
 command = """
-mkdir -p ${output}/${dataset}/query-analysis
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/query-analysis/shell \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
+mkdir -p ${dir}
+${ld_icebug}
+${mytime} -o ${timing} -- \
+  ${icebug}/.venv/bin/python ${icebug}/build_shellstruct.py \
+    ${csr-format.indptr} \
+    ${csr-format.indices} \
+    ${shell} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 
 ## query-analysis was done interactively here... via src/ours-icebug-commsearch/query_analysis.py
 ## shellstruct-analysis was done interactively here... via src/ours-icebug-commsearch/analyze_shellstruct.py
 """
 
 [recipe.cold-warm]
-params  = { dataset = ["cen", "abm14"] }
-deps    = ["csr-format(dataset=${dataset})"]
+params = { dataset = "training" }
+deps   = ["csr-format(dataset=${dataset})"]
 
-stdout  = "${output}/${dataset}/cold-warm/stdout.txt"
-stderr  = "${output}/${dataset}/cold-warm/stderr.txt"
-timing  = "${output}/${dataset}/cold-warm/timing"
+dir      = "${output}/${dataset}/cold-warm"
+stdout   = "${dir}/stdout.txt"
+stderr   = "${dir}/stderr.txt"
+timing   = "${dir}/timing"
+cores    = "${dir}/cores.npy"
+coldwarm = "${root}/src/cold-warm"
 
-command = """
-export root=${root}
-export input=${input}
-export output=${output}
-export dataset=${dataset}
-export stdout=${stdout}
-export stderr=${stderr}
-export timing=${timing}
-bash ${root}/src/cold-warm/run.sh
-"""
+interpreter  = "${util}/.venv/bin/python"
+command_file = "cmds/cold-warm.py"
 
-[recipe.ours-py-v-ib]
-params  = { dataset = ["cen", "abm14"] }
-deps    = ["csr-format(dataset=${dataset})", "ib-core-decomp(dataset=${dataset})"]
+[recipe.pyvib-query]
+params = { dataset = "training" }
+deps   = ["csr-format(dataset=${dataset})", "icebug-core-decomp(dataset=${dataset})"]
 
-stdout  = "${output}/${dataset}/ours-py-v-ib/stdout.txt"
-stderr  = "${output}/${dataset}/ours-py-v-ib/stderr.txt"
-timing  = "${output}/${dataset}/ours-py-v-ib/timing"
+dir    = "${output}/${dataset}/pyvib-query"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing"
+query  = "${dir}/query.csv"
 
-command = """
-mkdir -p ${output}/${dataset}/ours-py-v-ib
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-
-## generate queries
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-genquery.txt -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/py_v_ib.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/ours-py-v-ib/query.csv \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
-
-## icebug
-vmtouch -t ${input}/${dataset}.indptr.feather ${input}/${dataset}.indices.feather
-
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-icebug_build_shell.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/ours-py-v-ib/icebug_shell \
-    ${output}/${dataset}/ib-core-decomp/cores.csv \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-icebug_query_shell.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_shellstruct.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/ours-py-v-ib/icebug_shell.components.feather \
-    ${output}/${dataset}/ours-py-v-ib/icebug_shell.tree.feather \
-    ${output}/${dataset}/ours-py-v-ib/query.csv \
-    ${output}/${dataset}/ours-py-v-ib/icebug_shell_querytimes.csv \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-icebug_query_steiner.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_steiner.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/ib-core-decomp/cores.csv \
-    ${output}/${dataset}/ours-py-v-ib/query.csv \
-    ${output}/${dataset}/ours-py-v-ib/icebug_steiner_querytimes.csv \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-
-## python
-${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/warmup_jit.py
-vmtouch -t ${input}/${dataset}.indptr.feather ${input}/${dataset}.indices32.feather
-
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-python_build_shell.txt -- \
-  ${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/build_shellstruct.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices32.feather \
-    ${output}/${dataset}/ours-py-v-ib/python_shell \
-    ${output}/${dataset}/ib-core-decomp/cores.csv \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-python_query_shell.txt -- \
-  ${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/query_shellstruct.py \
-    ${output}/${dataset}/ours-py-v-ib/python_shell \
-    ${output}/${dataset}/ours-py-v-ib/query.csv \
-    ${output}/${dataset}/ours-py-v-ib/python_shell_querytimes.csv -b 1 \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-python_query_steiner.txt -- \
-  ${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/query_steiner.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices32.feather \
-    ${output}/${dataset}/ib-core-decomp/cores.csv \
-    ${output}/${dataset}/ours-py-v-ib/query.csv \
-    ${output}/${dataset}/ours-py-v-ib/python_steiner_querytimes.csv -t 1 -b 1 \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-"""
+interpreter  = "${util}/.venv/bin/python"
+command_file = "cmds/pyvib-query.py"
 
 [recipe.genquery]
-params  = { dataset = ["bitcoin", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["csr-format(dataset=${dataset})"]
-array   = true
+array  = true
+params = { dataset = "testing" }
+deps   = ["csr-format(dataset=${dataset})"]
 
-stdout  = "${output}/${dataset}/genquery/stdout.txt"
-stderr  = "${output}/${dataset}/genquery/stderr.txt"
-timing  = "${output}/${dataset}/genquery/timing"
+dir       = "${output}/${dataset}/genquery"
+querybase = "${output}/${dataset}/genquery"
+reps      = "0..19"
+sizes     = [1, 5, 10, 20]
+batches   = [1, 10, 100]
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing    = "${dir}/timing"
 
-command = """
-mkdir -p ${output}/${dataset}/genquery
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-p1.txt -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/gen_query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/genquery-n1-b1-r20 \
-    -n 1 -b 1 -r 20 \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-p2a.txt -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/gen_query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/genquery-n1-b10-r20 \
-    -n 1 -b 10 -r 20 \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-p2b.txt -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/gen_query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/genquery-n1-b100-r20 \
-    -n 1 -b 100 -r 20 \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-p3a.txt -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/gen_query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/genquery-n5-b1-r20 \
-    -n 5 -b 1 -r 20 \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-p3b.txt -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/gen_query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/genquery-n10-b1-r20 \
-    -n 10 -b 1 -r 20 \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-p3c.txt -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/gen_query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/genquery-n20-b1-r20 \
-    -n 20 -b 1 -r 20 \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-p4a.txt -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/gen_query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/genquery-n5-b10-r20 \
-    -n 5 -b 10 -r 20 \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-p4b.txt -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/gen_query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/genquery-n10-b10-r20 \
-    -n 10 -b 10 -r 20 \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-p4c.txt -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/gen_query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/genquery-n20-b10-r20 \
-    -n 20 -b 10 -r 20 \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-p4d.txt -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/gen_query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/genquery-n5-b100-r20 \
-    -n 5 -b 100 -r 20 \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-p4e.txt -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/gen_query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/genquery-n10-b100-r20 \
-    -n 10 -b 100 -r 20 \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-p4f.txt -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/gen_query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/genquery-n20-b100-r20 \
-    -n 20 -b 100 -r 20 \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-"""
+interpreter  = "${util}/.venv/bin/python"
+command_file = "cmds/genquery.py"
 
 [recipe.testing-steiner]
-deps       = ["genquery(dataset=${dataset})", "csr-format(dataset=${dataset})", "ib-core-decomp(dataset=${dataset})"]
 array      = true
 array_axes = ["rep", "size", "batch"]
+params     = { dataset = "testing", rep = "genquery.reps", size = "genquery.sizes", batch = "genquery.batches" }
+deps       = ["genquery(dataset=${dataset})", "csr-format(dataset=${dataset})", "icebug-core-decomp(dataset=${dataset})"]
 
-params  = { dataset = ["bitcoin", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"], rep = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"], size = [1, 5, 10, 20], batch = [1, 10, 100] }
-
-stdout  = "${output}/${dataset}/testing-steiner/stdout.txt"
-stderr  = "${output}/${dataset}/testing-steiner/stderr.txt"
-timing  = "${output}/${dataset}/testing-steiner/timing"
+dir    = "${output}/${dataset}/testing-steiner"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing"
 
 command = """
-mkdir -p ${output}/${dataset}/testing-steiner
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-python-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-vmtouch -t ${input}/${dataset}.indptr.feather ${input}/${dataset}.indices32.feather
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
-  ${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/query_steiner.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices32.feather \
-    ${output}/${dataset}/ib-core-decomp/cores.csv \
-    ${output}/${dataset}/genquery-n${size}-b${batch}-r20/query${rep}.csv \
-    ${output}/${dataset}/testing-steiner/querytimes-n${size}-b${batch}-rep${rep}.csv \
+mkdir -p ${dir}
+${ld_pycs}
+vmtouch -t ${csr-format.indptr} ${csr-format.indices32}
+${mytime} -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
+  ${pycs}/.venv/bin/python ${pycs}/query_steiner.py \
+    ${csr-format.indptr} \
+    ${csr-format.indices32} \
+    ${icebug-core-decomp.cores} \
+    ${genquery.querybase}-n${size}-b${batch}-r20/query${rep}.csv \
+    ${dir}/querytimes-n${size}-b${batch}-rep${rep}.csv \
     -t ${slurm.cpus} -b ${batch} \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr} >&2)
 """
 
 [recipe.testing-par-shellstruct-offline]
-array   = true
-params  = { dataset = ["bitcoin", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["csr-format(dataset=${dataset})", "ib-core-decomp(dataset=${dataset})"]
-slurm   = { exclusive = true }
+array  = true
+params = { dataset = "testing" }
+deps   = ["csr-format(dataset=${dataset})", "icebug-core-decomp(dataset=${dataset})"]
+slurm  = { exclusive = true }
 
-stdout  = "${output}/${dataset}/testing-par-shellstruct/offline-stdout.txt"
-stderr  = "${output}/${dataset}/testing-par-shellstruct/offline-stderr.txt"
-timing  = "${output}/${dataset}/testing-par-shellstruct/offline-timing.txt"
+dir    = "${output}/${dataset}/testing-par-shellstruct"
+stdout = "${dir}/offline-stdout.txt"
+stderr = "${dir}/offline-stderr.txt"
+timing = "${dir}/offline-timing.txt"
+shell  = "${dir}/shell"
 
 command = """
-mkdir -p ${output}/${dataset}/testing-par-shellstruct
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/testing-par-shellstruct/shell \
-    ${output}/${dataset}/ib-core-decomp/cores.csv \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
+mkdir -p ${dir}
+${ld_icebug}
+${mytime} -o ${timing} -- \
+  ${icebug}/.venv/bin/python ${icebug}/build_shellstruct.py \
+    ${csr-format.indptr} \
+    ${csr-format.indices} \
+    ${shell} \
+    ${icebug-core-decomp.cores} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
 [recipe.testing-par-shellstruct-online]
 array      = true
 array_axes = ["rep", "size", "batch"]
-params  = { dataset = ["bitcoin", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"], rep = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"], size = [1, 5, 10, 20], batch = [1, 10, 100] }
-deps    = ["testing-par-shellstruct-offline(dataset=${dataset})", "genquery(dataset=${dataset})"]
-slurm   = { cpus = 1 }
+params     = { dataset = "testing", rep = "genquery.reps", size = "genquery.sizes", batch = "genquery.batches" }
+deps       = ["testing-par-shellstruct-offline(dataset=${dataset})", "genquery(dataset=${dataset})"]
+slurm      = { cpus = 1 }
 
-stdout  = "${output}/${dataset}/testing-par-shellstruct/stdout.txt"
-stderr  = "${output}/${dataset}/testing-par-shellstruct/stderr.txt"
-timing  = "${output}/${dataset}/testing-par-shellstruct/timing"
+dir    = "${output}/${dataset}/testing-par-shellstruct"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing"
 
 command = """
-mkdir -p ${output}/${dataset}/testing-par-shellstruct
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-python-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
-  ${root}/src/ours-python-commsearch/.venv/bin/python ${root}/src/ours-python-commsearch/query_shellstruct.py \
-    ${output}/${dataset}/testing-par-shellstruct/shell \
-    ${output}/${dataset}/genquery-n${size}-b${batch}-r20/query${rep}.csv \
-    ${output}/${dataset}/testing-par-shellstruct/querytimes-n${size}-b${batch}-rep${rep}.csv \
+mkdir -p ${dir}
+${ld_pycs}
+${mytime} -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
+  ${pycs}/.venv/bin/python ${pycs}/query_shellstruct.py \
+    ${testing-par-shellstruct-offline.shell} \
+    ${genquery.querybase}-n${size}-b${batch}-r20/query${rep}.csv \
+    ${dir}/querytimes-n${size}-b${batch}-rep${rep}.csv \
     -b ${batch} \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr} >&2)
 """
 
 [recipe.testing-csk]
-array   = true
-deps    = ["genquery(dataset=${dataset})", "ib-core-decomp(dataset=${dataset})"]
-params  = { dataset = ["bitcoin", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"], rep = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"], size = [1], batch = [1, 10, 100] }
-slurm   = { cpus = 1 }
+array      = true
+array_axes = ["rep", "size", "batch"]
+params     = { dataset = "testing", rep = "genquery.reps", size = [1], batch = "genquery.batches" }
+deps       = ["genquery(dataset=${dataset})", "icebug-core-decomp(dataset=${dataset})"]
+slurm      = { cpus = 1 }
 
-stdout  = "${output}/${dataset}/testing-csk/stdout.txt"
-stderr  = "${output}/${dataset}/testing-csk/stderr.txt"
-timing  = "${output}/${dataset}/testing-csk/timing"
+dir    = "${output}/${dataset}/testing-csk"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing"
+csk    = "${root}/src/csk-commsearch"
 
 command = """
-mkdir -p ${output}/${dataset}/testing-csk/n${size}-b${batch}-rep${rep}
+mkdir -p ${dir}/n${size}-b${batch}-rep${rep}
 vmtouch -t ${input}/${dataset}.csv
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
-  ${root}/src/csk-commsearch/main -s \
-    ${output}/${dataset}/testing-csk/n${size}-b${batch}-rep${rep}/ \
+${mytime} -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
+  ${csk}/main -s \
+    ${dir}/n${size}-b${batch}-rep${rep}/ \
     ${input}/${dataset}.csv \
-    ${output}/${dataset}/ib-core-decomp/cores.csv \
-    ${output}/${dataset}/genquery-n${size}-b${batch}-r20/query${rep}.csv \
+    ${icebug-core-decomp.cores} \
+    ${genquery.querybase}-n${size}-b${batch}-r20/query${rep}.csv \
     --nodelist \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr} >&2)
 """
 
 [recipe.testing-gullo-shellstruct-offline]
-array   = true
-deps    = ["build"]
-params  = { dataset = ["bitcoin", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-slurm   = { cpus = 1, exclusive = true }
+array  = true
+params = { dataset = "testing" }
+deps   = ["build"]
+slurm  = { cpus = 1, exclusive = true }
 
-stdout  = "${output}/${dataset}/testing-gullo-shellstruct/offline-stdout.txt"
-stderr  = "${output}/${dataset}/testing-gullo-shellstruct/offline-stderr.txt"
-timing  = "${output}/${dataset}/testing-gullo-shellstruct/offline-timing.txt"
+dir      = "${output}/${dataset}/testing-gullo-shellstruct"
+stdout   = "${dir}/offline-stdout.txt"
+stderr   = "${dir}/offline-stderr.txt"
+timing   = "${dir}/offline-timing.txt"
+shell    = "${dir}/shell"
+shellbin = "${dir}/shell.bin"
 
 command = """
-mkdir -p ${output}/${dataset}/testing-gullo-shellstruct
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/gullo-shellstruct/run.sh main.BuildIndex_PKDDJ \
+mkdir -p ${dir}
+${mytime} -o ${timing} -- \
+  ${gullo}/run.sh main.BuildIndex_PKDDJ \
     ${input}/${dataset}.csv \
-    ${output}/${dataset}/testing-gullo-shellstruct/shell.bin \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
+    ${shellbin} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
 [recipe.testing-gullo-shellstruct-online]
 array      = true
 array_axes = ["rep", "size", "batch"]
-deps    = ["testing-gullo-shellstruct-offline(dataset=${dataset})", "genquery(dataset=${dataset})"]
-params  = { dataset = ["bitcoin", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"], rep = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"], size = [1, 5, 10, 20], batch = [1, 10, 100] }
-slurm   = { cpus = 1 }
+params     = { dataset = "testing", rep = "genquery.reps", size = "genquery.sizes", batch = "genquery.batches" }
+deps       = ["testing-gullo-shellstruct-offline(dataset=${dataset})", "genquery(dataset=${dataset})"]
+slurm      = { cpus = 1 }
 
-stdout  = "${output}/${dataset}/testing-gullo-shellstruct/stdout.txt"
-stderr  = "${output}/${dataset}/testing-gullo-shellstruct/stderr.txt"
-timing  = "${output}/${dataset}/testing-gullo-shellstruct/timing"
+dir    = "${output}/${dataset}/testing-gullo-shellstruct"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing"
 
 command = """
-mkdir -p ${output}/${dataset}/testing-gullo-shellstruct
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
-  ${root}/src/gullo-shellstruct/run.sh main.MyMain \
+mkdir -p ${dir}
+${mytime} -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
+  ${gullo}/run.sh main.MyMain \
     -n ${input}/${dataset}.csv \
-    -s ${output}/${dataset}/testing-gullo-shellstruct/shell \
+    -s ${testing-gullo-shellstruct-offline.shell} \
     -sk ss \
-    -q ${output}/${dataset}/genquery-n${size}-b${batch}-r20/query${rep}.csv \
+    -q ${genquery.querybase}-n${size}-b${batch}-r20/query${rep}.csv \
     -a core \
-    -o  ${output}/${dataset}/testing-gullo-shellstruct/comms-n${size}-b${batch}-rep${rep} \
-  1> >(tee -a ${stdout} ${output}/${dataset}/testing-gullo-shellstruct/gullo-n${size}-b${batch}-rep${rep}.log > /dev/null) 2> >(tee -a ${stderr})
+    -o  ${dir}/comms-n${size}-b${batch}-rep${rep} \
+  1> >(tee -a ${stdout} ${dir}/gullo-n${size}-b${batch}-rep${rep}.log) 2> >(tee -a ${stderr} >&2)
 """
 
-[recipe.commsearch-abm272-preprocess]
-slurm   = { cpus = 1 }
-deps    = ["build"]
+[recipe.traincs-genquery]
+array  = true
+params = { dataset = "training" }
+deps   = ["csr-format(dataset=${dataset})"]
+slurm  = { cpus = 1 }
 
-stdout  = "${output}/abm272_mf/preprocess-stdout.txt"
-stderr  = "${output}/abm272_mf/preprocess-stderr.txt"
-timing  = "${output}/abm272_mf/preprocess-timing.txt"
-
-command = """
-mkdir -p ${output}/abm272_mf
-export LD_LIBRARY_PATH=$(
-    ${root}/src/commsearch-abm272/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/commsearch-abm272/.venv/bin/python ${root}/src/commsearch-abm272/build_fields.py \
-    ${root}/src/commsearch-abm272/input/abm272mf_nodelist.parquet \
-    ${root}/src/commsearch-abm272/input/tc_combined_nodelist.csv \
-    ${output}/abm272_mf/all_nodelist.csv \
-  1> >(tee ${stdout})  2> >(tee ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  ${root}/src/commsearch-abm272/.venv/bin/python ${root}/src/commsearch-abm272/check.py \
-    ${root}/src/commsearch-abm272/input/abm272mf_nodelist.parquet \
-    ${root}/src/commsearch-abm272/input/tc_combined_nodelist.csv \
-    ${output}/abm272_mf/all_nodelist.csv \
-  1> >(tee -a ${stdout})  2> >(tee -a ${stderr})
-"""
-
-[recipe.commsearch-abm272-build-network]
-array   = true
-slurm   = { cpus = 4, time = "30:00" }
-params  = { year = [2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033, 2034, 2035, 2036, 2037, 2038, 2039, 2040, 2041, 2042, 2043, 2044, 2045, 2046, 2047, 2048, 2049, 2050, 2051, 2052, 2053, 2054, 2055, 2056, 2057, 2058, 2059, 2060, 2061, 2062, 2063, 2064, 2065, 2066, 2067, 2068, 2069, 2070, 2071, 2072, 2073, 2074, 2075, 2076, 2077, 2078, 2079, 2080, 2081, 2082, 2083, 2084, 2085, 2086, 2087, 2088, 2089, 2090, 2091, 2092, 2093, 2094, 2095, 2096, 2097, 2098, 2099, 2100, 2101, 2102, 2103, 2104, 2105, 2106, 2107, 2108, 2109, 2110, 2111, 2112, 2113, 2114, 2115, 2116, 2117, 2118, 2119, 2120, 2121, 2122, 2123, 2124, 2125, 2126, 2127, 2128, 2129, 2130, 2131, 2132, 2133, 2134, 2135, 2136, 2137, 2138, 2139, 2140, 2141, 2142, 2143, 2144, 2145, 2146] }
-deps    = ["build"]
-
-stdout  = "${output}/abm272_mf/${year}/build-stdout.txt"
-stderr  = "${output}/abm272_mf/${year}/build-stderr.txt"
-timing  = "${output}/abm272_mf/${year}/build-timing.txt"
+dir    = "${output}/${dataset}/traincs"
+stdout = "${dir}/genquery-stdout.txt"
+stderr = "${dir}/genquery-stderr.txt"
+timing = "${dir}/genquery-timing.txt"
+querybase = "${dir}/genquery"
+reps      = "0..19"
+sizes     = [1, 10]
 
 command = """
-mkdir -p ${output}/abm272_mf/${year}/
-export LD_LIBRARY_PATH=$(
-    ${root}/src/commsearch-abm272/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/commsearch-abm272/.venv/bin/python ${root}/src/commsearch-abm272/prep_year.py \
-    ${root}/src/commsearch-abm272/input/abm272mf_edgelist.parquet \
-    ${root}/src/commsearch-abm272/input/abm272mf_nodelist.parquet \
-    ${year} \
-    ${output}/abm272_mf/${year}/graph \
-  1> >(tee ${stdout})  2> >(tee ${stderr})
-"""
-
-[recipe.commsearch-abm272-build-shellstruct]
-array   = true
-slurm   = { cpus = 4, mem = "256GB" }
-params  = { year = [2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033, 2034, 2035, 2036, 2037, 2038, 2039, 2040, 2041, 2042, 2043, 2044, 2045, 2046, 2047, 2048, 2049, 2050, 2051, 2052, 2053, 2054, 2055, 2056, 2057, 2058, 2059, 2060, 2061, 2062, 2063, 2064, 2065, 2066, 2067, 2068, 2069, 2070, 2071, 2072, 2073, 2074, 2075, 2076, 2077, 2078, 2079, 2080, 2081, 2082, 2083, 2084, 2085, 2086, 2087, 2088, 2089, 2090, 2091, 2092, 2093, 2094, 2095, 2096, 2097, 2098, 2099, 2100, 2101, 2102, 2103, 2104, 2105, 2106, 2107, 2108, 2109, 2110, 2111, 2112, 2113, 2114, 2115, 2116, 2117, 2118, 2119, 2120, 2121, 2122, 2123, 2124, 2125, 2126, 2127, 2128, 2129, 2130, 2131, 2132, 2133, 2134, 2135, 2136, 2137, 2138, 2139, 2140, 2141, 2142, 2143, 2144, 2145, 2146] }
-deps    = ["commsearch-abm272-build-network(year=${year})"]
-
-stdout  = "${output}/abm272_mf/${year}/shellstruct-stdout.txt"
-stderr  = "${output}/abm272_mf/${year}/shellstruct-stderr.txt"
-timing  = "${output}/abm272_mf/${year}/shellstruct-timing.txt"
-
-command = """
-mkdir -p ${output}/abm272_mf/${year}/
-export LD_LIBRARY_PATH=$(
-    ${root}/src/commsearch-abm272/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/commsearch-abm272/.venv/bin/python ${root}/src/commsearch-abm272/build_shellstruct.py \
-    ${output}/abm272_mf/${year}/graph.indptr.parquet \
-    ${output}/abm272_mf/${year}/graph.indices.parquet \
-    ${output}/abm272_mf/${year}/shell \
-  1> >(tee ${stdout})  2> >(tee ${stderr})
-"""
-
-[recipe.commsearch-abm272-query]
-slurm   = { cpus = 1 }
-deps    = ["commsearch-abm272-build-shellstruct(year=*)"]
-
-stdout  = "${output}/abm272_mf/query-stdout.txt"
-stderr  = "${output}/abm272_mf/query-stderr.txt"
-timing  = "${output}/abm272_mf/query-timing.txt"
-
-command = """
-mkdir -p ${output}/abm272_mf/
-export LD_LIBRARY_PATH=$(
-    ${root}/src/commsearch-abm272/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/commsearch-abm272/.venv/bin/python ${root}/src/commsearch-abm272/query_shellstruct.py \
-    ${output}/abm272_mf/ \
-    ${output}/abm272_mf/all_nodelist.csv \
-    ${root}/src/commsearch-abm272/input/tc_combined_nodelist.csv \
-  1> >(tee ${stdout})  2> >(tee ${stderr})
-"""
-
-[recipe.testing-shellstruct-offline-t8]
-slurm   = { cpus = 8 }
-array   = true
-params  = { dataset = ["bitcoin", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["csr-format(dataset=${dataset})"]
-
-stdout  = "${output}/${dataset}/testing-shellstruct-offline-t8/stdout.txt"
-stderr  = "${output}/${dataset}/testing-shellstruct-offline-t8/stderr.txt"
-timing  = "${output}/${dataset}/testing-shellstruct-offline-t8/timing"
-
-command = """
-mkdir -p ${output}/${dataset}/testing-shellstruct-offline-t8
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-vmtouch -t ${input}/${dataset}.indptr.feather ${input}/${dataset}.indices.feather
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-coredecomp.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/core_decomposition.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/testing-shellstruct-offline-t8/cores.csv \
-    --threads ${slurm.cpus} \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-shellstruct.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/testing-shellstruct-offline-t8/shell \
-    ${output}/${dataset}/testing-shellstruct-offline-t8/cores.csv \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-"""
-
-[recipe.testing-shellstruct-offline-t32]
-slurm   = { cpus = 32 }
-array   = true
-params  = { dataset = ["bitcoin", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-deps    = ["csr-format(dataset=${dataset})"]
-
-stdout  = "${output}/${dataset}/testing-shellstruct-offline-t32/stdout.txt"
-stderr  = "${output}/${dataset}/testing-shellstruct-offline-t32/stderr.txt"
-timing  = "${output}/${dataset}/testing-shellstruct-offline-t32/timing"
-
-command = """
-mkdir -p ${output}/${dataset}/testing-shellstruct-offline-t32
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-vmtouch -t ${input}/${dataset}.indptr.feather ${input}/${dataset}.indices.feather
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-coredecomp.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/core_decomposition.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/testing-shellstruct-offline-t32/cores.csv \
-    --threads ${slurm.cpus} \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-shellstruct.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/testing-shellstruct-offline-t32/shell \
-    ${output}/${dataset}/testing-shellstruct-offline-t32/cores.csv \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-"""
-
-[recipe.training-genquery]
-slurm   = { cpus = 1 }
-array   = true
-params  = { dataset = ["abm14", "cen"] }
-deps    = ["csr-format(dataset=${dataset})"]
-
-stdout  = "${output}/${dataset}/training-local-steiner-shell/genquery-stdout.txt"
-stderr  = "${output}/${dataset}/training-local-steiner-shell/genquery-stderr.txt"
-timing  = "${output}/${dataset}/training-local-steiner-shell/genquery-timing.txt"
-
-command = """
-mkdir -p ${output}/${dataset}/training-local-steiner-shell
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing} -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/gen_query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/training-local-steiner-shell/genquery-n1-b20-r1 \
+mkdir -p ${dir}
+${ld_icebug}
+${mytime} -o ${timing} -- \
+  ${genq}/.venv/bin/python ${genq}/gen_query.py \
+    ${csr-format.indptr} \
+    ${csr-format.indices} \
+    ${querybase}-n1-b20-r1 \
     -n 1 -b 20 -r 1 \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-  ${root}/src/gen-query/.venv/bin/python ${root}/src/gen-query/gen_query.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/training-local-steiner-shell/genquery-n10-b20-r1 \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+${mytime} -a -o ${timing} -- \
+  ${genq}/.venv/bin/python ${genq}/gen_query.py \
+    ${csr-format.indptr} \
+    ${csr-format.indices} \
+    ${querybase}-n10-b20-r1 \
     -n 10 -b 20 -r 1 \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr} >&2)
 """
 
-[recipe.training-steiner-shell]
-slurm   = { cpus = 16 }
-array   = true
-params  = { dataset = ["abm14", "cen"] }
-deps    = ["csr-format(dataset=${dataset})", "training-genquery(dataset=${dataset})"]
+[recipe.traincs-steiner-shell]
+array  = true
+params = { dataset = "training" }
+deps   = ["csr-format(dataset=${dataset})", "traincs-genquery(dataset=${dataset})"]
+slurm  = { cpus = 16 }
 
-stdout  = "${output}/${dataset}/training-local-steiner-shell/stdout.txt"
-stderr  = "${output}/${dataset}/training-local-steiner-shell/stderr.txt"
-timing  = "${output}/${dataset}/training-local-steiner-shell/timing"
+dir    = "${output}/${dataset}/traincs"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing"
+cores  = "${dir}/cores.csv"
+shell  = "${dir}/shell"
 
-command = """
-mkdir -p ${output}/${dataset}/training-local-steiner-shell
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
+interpreter  = "${util}/.venv/bin/python"
+command_file = "cmds/traincs-steiner-shell.py"
 
-vmtouch -t ${input}/${dataset}.indptr.feather ${input}/${dataset}.indices.feather
-
-## core decomposition
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-coredecomp.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/core_decomposition.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/training-local-steiner-shell/cores.csv \
-    --threads ${slurm.cpus} \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
-
-## shellstruct offline
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-shellstruct-offline.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/build_shellstruct.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/training-local-steiner-shell/shell \
-    ${output}/${dataset}/training-local-steiner-shell/cores.csv \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-
-## shellstruct online
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-shellstruct-online-n1.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_shellstruct.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/training-local-steiner-shell/shell.components.feather \
-    ${output}/${dataset}/training-local-steiner-shell/shell.tree.feather \
-    ${output}/${dataset}/training-local-steiner-shell/genquery-n1-b20-r1/query0.csv \
-    ${output}/${dataset}/training-local-steiner-shell/shellstruct-querytimes-n1.csv \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-shellstruct-online-n10.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_shellstruct.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/training-local-steiner-shell/shell.components.feather \
-    ${output}/${dataset}/training-local-steiner-shell/shell.tree.feather \
-    ${output}/${dataset}/training-local-steiner-shell/genquery-n10-b20-r1/query0.csv \
-    ${output}/${dataset}/training-local-steiner-shell/shellstruct-querytimes-n10.csv \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-
-## steiner online
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-steiner-n1.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_steiner.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/training-local-steiner-shell/cores.csv \
-    ${output}/${dataset}/training-local-steiner-shell/genquery-n1-b20-r1/query0.csv \
-    ${output}/${dataset}/training-local-steiner-shell/steiner-querytimes-n1.csv \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-steiner-n10.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_steiner.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    ${output}/${dataset}/training-local-steiner-shell/cores.csv \
-    ${output}/${dataset}/training-local-steiner-shell/genquery-n10-b20-r1/query0.csv \
-    ${output}/${dataset}/training-local-steiner-shell/steiner-querytimes-n10.csv \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-"""
-
-[recipe.training-local]
-slurm      = { cpus = 16 }
+[recipe.traincs-local]
 array      = true
-array_axes = ["rep"]
-params  = { dataset = ["abm14", "cen"], rep = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"] }
-deps    = ["csr-format(dataset=${dataset})", "training-genquery(dataset=${dataset})"]
-
-stdout  = "${output}/${dataset}/training-local-steiner-shell/local-stdout-rep${rep}.txt"
-stderr  = "${output}/${dataset}/training-local-steiner-shell/local-stderr-rep${rep}.txt"
-timing  = "${output}/${dataset}/training-local-steiner-shell/timing"
-
-command = """
-mkdir -p ${output}/${dataset}/training-local-steiner-shell
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-
-vmtouch -t ${input}/${dataset}.indptr.feather ${input}/${dataset}.indices.feather
-
-tmp=$(mktemp -d)
-
-## local online -- one query (row ${rep} of the 20-query batch) per job
-sed -n "$((${rep} + 1))p" \
-  ${output}/${dataset}/training-local-steiner-shell/genquery-n1-b20-r1/query0.csv > $tmp/query-n1.csv
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-local-n1-rep${rep}.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_local.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    $tmp/query-n1.csv \
-    ${output}/${dataset}/training-local-steiner-shell/local-querytimes-n1-rep${rep}.csv \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
-
-sed -n "$((${rep} + 1))p" \
-  ${output}/${dataset}/training-local-steiner-shell/genquery-n10-b20-r1/query0.csv > $tmp/query-n10.csv
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-local-n10-rep${rep}.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_local.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    $tmp/query-n10.csv \
-    ${output}/${dataset}/training-local-steiner-shell/local-querytimes-n10-rep${rep}.csv \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-"""
-
-[recipe.training-local-upper]
+array_axes = ["rep", "size"]
+params     = { dataset = "training", rep = "traincs-genquery.reps", size = "traincs-genquery.sizes", variant = ["local", "local-upper"] }
+deps       = ["csr-format(dataset=${dataset})", "traincs-genquery(dataset=${dataset})"]
 slurm      = { cpus = 16 }
-array      = true
-array_axes = ["rep"]
-params  = { dataset = ["abm14", "cen"], rep = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"] }
-deps    = ["csr-format(dataset=${dataset})", "training-genquery(dataset=${dataset})"]
 
-stdout  = "${output}/${dataset}/training-local-steiner-shell/local-upper-stdout-rep${rep}.txt"
-stderr  = "${output}/${dataset}/training-local-steiner-shell/local-upper-stderr-rep${rep}.txt"
-timing  = "${output}/${dataset}/training-local-steiner-shell/timing"
+dir    = "${output}/${dataset}/traincs"
+stdout = "${dir}/${variant}-stdout-n${size}-rep${rep}.txt"
+stderr = "${dir}/${variant}-stderr-n${size}-rep${rep}.txt"
+timing = "${dir}/timing"
 
-command = """
-mkdir -p ${output}/${dataset}/training-local-steiner-shell
-export LD_LIBRARY_PATH=$(
-    ${root}/src/ours-icebug-commsearch/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
-  ):$LD_LIBRARY_PATH
-
-vmtouch -t ${input}/${dataset}.indptr.feather ${input}/${dataset}.indices.feather
-
-tmp=$(mktemp -d)
-
-## local online -- one query (row ${rep} of the 20-query batch) per job
-sed -n "$((${rep} + 1))p" \
-  ${output}/${dataset}/training-local-steiner-shell/genquery-n1-b20-r1/query0.csv > $tmp/query-n1.csv
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-local-upper-n1-rep${rep}.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_local.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    $tmp/query-n1.csv \
-    ${output}/${dataset}/training-local-steiner-shell/local-upper-querytimes-n1-rep${rep}.csv \
-    -u \
-  1> >(tee ${stdout}) 2> >(tee ${stderr})
-
-sed -n "$((${rep} + 1))p" \
-  ${output}/${dataset}/training-local-steiner-shell/genquery-n10-b20-r1/query0.csv > $tmp/query-n10.csv
-uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -o ${timing}-local-upper-n10-rep${rep}.txt -- \
-  ${root}/src/ours-icebug-commsearch/.venv/bin/python ${root}/src/ours-icebug-commsearch/query_local.py \
-    ${input}/${dataset}.indptr.feather \
-    ${input}/${dataset}.indices.feather \
-    $tmp/query-n10.csv \
-    ${output}/${dataset}/training-local-steiner-shell/local-upper-querytimes-n10-rep${rep}.csv \
-    -u \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr})
-"""
+interpreter  = "${util}/.venv/bin/python"
+command_file = "cmds/traincs-local.py"
