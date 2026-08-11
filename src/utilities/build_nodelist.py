@@ -10,12 +10,16 @@ def main() -> None:
     parser.add_argument("output", help="Output file with one node ID per line")
     parser.add_argument("--sep", default=",", help="Field separator, e.g. ',' or '\\t'")
     parser.add_argument("--header", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--format", dest="fmt", choices=["csv", "parquet"], default="csv")
     args = parser.parse_args()
 
     con = duckdb.connect()
     con.execute("SET preserve_insertion_order = false;")
 
-    read_edges = f"read_csv({args.input!r}, delim={args.sep!r}, header={str(args.header).lower()}, names=[source, target])"
+    if args.fmt == "parquet":
+        read_edges = f"read_parquet({args.input!r})"
+    else:
+        read_edges = f"read_csv({args.input!r}, delim={args.sep!r}, header={str(args.header).lower()}, names=[source, target])"
 
     query = f"""
     COPY (

@@ -19,7 +19,6 @@ def main(input_csv, output_csr, symmetrize, sep, skip_rows):
             directed=not symmetrize,
         ),
     )
-    # A write spec takes a prefix and appends .indices.parquet / .indptr.parquet.
     output = fmt.GraphDescriptor(output_csr, fmt.CsrParquet.Write(u64_indices=True))
 
     Path(output_csr).parent.mkdir(exist_ok=True, parents=True)
