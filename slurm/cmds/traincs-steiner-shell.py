@@ -8,7 +8,7 @@ from _driver import tee_streams, use_pyarrow_libs
 INDPTR    = "${csr-format.indptr}"
 INDICES   = "${csr-format.indices}"
 QUERYBASE = "${traincs-genquery.querybase}"
-CORES     = "${icebug-core-decomp.cores}"
+CORES     = "${traincd-icebug-core-decomp.cores}"
 SHELL     = "${shell}"
 DIR       = "${dir}"
 TIMING    = "${timing}"

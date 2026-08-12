@@ -110,7 +110,7 @@ ${mytime} -o ${timing} -- \
 
 [recipe.nk-format]
 array  = true
-params = { dataset = "training_networks" }
+params = { dataset = "all_networks" }
 deps   = ["build"]
 
 dir    = "${output}/${dataset}/nk-format"
@@ -307,7 +307,32 @@ ${mytime} -o ${timing} -- \
   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
-[recipe.icebug-core-decomp]
+[recipe.traincd-icebug-core-decomp]
+array  = true
+params = { dataset = "training_networks" }
+deps   = ["csr-format(dataset=${dataset})"]
+slurm  = { cpus = 16 }
+
+dir    = "${output}/${dataset}/traincd-icebug-core-decomp"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+cores  = "${dir}/cores.csv"
+
+command = """
+mkdir -p ${dir}
+vmtouch -t ${csr-format.indptr} ${csr-format.indices}
+${ld_icebug}
+${mytime} -o ${timing} -- \
+  ${icebug}/.venv/bin/python ${icebug}/core_decomposition.py \
+    ${csr-format.indptr} \
+    ${csr-format.indices} \
+    ${cores} \
+    --threads ${slurm.cpus} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+"""
+
+[recipe.stat-icebug-core-decomp]
 array  = true
 params = { dataset = "all_networks" }
 deps   = ["csr-format(dataset=${dataset})"]
@@ -332,7 +357,7 @@ ${mytime} -o ${timing} -- \
   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
-[recipe.network-stats]
+[recipe.stat-network-stats]
 array  = true
 params = { dataset = "all_networks" }
 deps   = ["csr-format(dataset=${dataset})"]
@@ -353,8 +378,9 @@ ${mytime} -o ${timing} -- \
   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
-[recipe.centrality]
-params = { dataset = "training_networks" }
+[recipe.stat-centrality]
+array  = true
+params = { dataset = "all_networks" }
 deps   = ["nk-format(dataset=${dataset})"]
 
 dir    = "${output}/${dataset}/centrality"
@@ -373,7 +399,7 @@ ${mytime} -o ${timing} -- \
   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
-[recipe.icebug-shellstruct]
+[recipe.stat-icebug-shellstruct]
 array  = true
 params = { dataset = "all_networks" }
 deps   = ["csr-format(dataset=${dataset})"]
@@ -396,15 +422,41 @@ ${mytime} -o ${timing} -- \
     ${csr-format.indices} \
     ${shell} \
   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
-
-## query-analysis was done interactively here... via src/ours-icebug-commsearch/query_analysis.py
-## shellstruct-analysis was done interactively here... via src/ours-icebug-commsearch/analyze_shellstruct.py
 """
 
-[recipe.network-stats-extended]
+[recipe.stat-query-analysis]
+array  = true
+params = { dataset = "all_networks" }
+deps   = ["csr-format(dataset=${dataset})", "stat-icebug-shellstruct(dataset=${dataset})",
+          "stat-centrality(dataset=${dataset})"]
+
+dir    = "${output}/${dataset}/query-analysis"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+result = "${dir}/query_analysis.csv"
+
+command = """
+mkdir -p ${dir}
+vmtouch -t ${csr-format.indptr} ${csr-format.indices} \
+  ${stat-icebug-shellstruct.components} ${stat-icebug-shellstruct.tree}
+${ld_icebug}
+${mytime} -o ${timing} -- \
+  ${icebug}/.venv/bin/python ${icebug}/query_analysis.py \
+    ${dataset} \
+    ${csr-format.indptr} \
+    ${csr-format.indices} \
+    ${stat-icebug-shellstruct.components} \
+    ${stat-icebug-shellstruct.tree} \
+    ${stat-centrality.result} \
+    ${result} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+"""
+
+[recipe.stat-network-stats-extended]
 params = { dataset = "all_networks" }
 deps   = ["csr-format(dataset=${dataset})", "gbbs-format(dataset=${dataset})",
-          "icebug-shellstruct(dataset=${dataset})"]
+          "stat-icebug-shellstruct(dataset=${dataset})"]
 slurm  = { cpus = 16, mem = { param = "dataset", default = "128GB", twitter_social = "256GB", friendster = "256GB" } }
 
 dir    = "${output}/${dataset}/network-stats-extended"
@@ -412,6 +464,7 @@ stdout = "${dir}/stdout.txt"
 stderr = "${dir}/stderr.txt"
 timing = "${dir}/timing.txt"
 stats  = "${dir}/stats.csv"
+coresizes = "${dir}/coresizes.csv"
 
 interpreter  = "${util}/.venv/bin/python"
 command_file = "cmds/network-stats-extended.py"
@@ -432,7 +485,7 @@ command_file = "cmds/cold-warm.py"
 
 [recipe.pyvib-query]
 params = { dataset = "training_networks" }
-deps   = ["csr-format(dataset=${dataset})", "icebug-core-decomp(dataset=${dataset})"]
+deps   = ["csr-format(dataset=${dataset})", "stat-icebug-core-decomp(dataset=${dataset})"]
 
 dir    = "${output}/${dataset}/pyvib-query"
 stdout = "${dir}/stdout.txt"
@@ -663,7 +716,7 @@ ${mytime} -a -o ${timing} -- \
 array  = true
 params = { dataset = "training_networks" }
 deps   = ["csr-format(dataset=${dataset})", "traincs-genquery(dataset=${dataset})",
-          "icebug-core-decomp(dataset=${dataset})"]
+          "traincd-icebug-core-decomp(dataset=${dataset})"]
 slurm  = { cpus = 16 }
 
 dir    = "${output}/${dataset}/traincs"
@@ -771,6 +824,21 @@ ${mytime} -o ${timing} -- \
     --threads ${threads} \
   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
+
+[recipe.strongscaling-shellstruct-online]
+array  = true
+params = { dataset = "all_networks" }
+deps   = ["strongscaling-shellstruct(dataset=${dataset}, threads=1)",
+          "strongscaling-genquery(dataset=${dataset})"]
+slurm  = { cpus = 1 }
+
+dir    = "${output}/${dataset}/strongscaling"
+stdout = "${dir}/shellstruct-online-stdout.txt"
+stderr = "${dir}/shellstruct-online-stderr.txt"
+timing = "${dir}/shellstruct-online-timing"
+
+interpreter  = "${util}/.venv/bin/python"
+command_file = "cmds/strongscaling-shellstruct-online.py"
 
 [recipe.strongscaling-steiner]
 array      = true

@@ -9,7 +9,7 @@ Preferred usage is with zero-copy memory-mapped feather files.
 
 ## Scripts
 
-### analyze_shellstruct
+### network-stats-extended
 
 The ShellStruct format is written to two feather files:
 
@@ -26,7 +26,7 @@ the tree table contains four columns:
 
 where the indices has an additional padding (a tree of `n` nodes has `n-1` edges), and the `indptr` is missing the implicit `n` at the end.
 
-The `analyze_shellstruct.py` script then analyzes the shellstruct to output each possible maximal k-core community in the graph, and its size.
+The `network-stats-extended.py` script then analyzes the shellstruct, writing two CSVs: the per-network statistics (community count, average community size and volume as fractions), and each possible maximal k-core community in the graph with its size.
 
 ### network-stats
 

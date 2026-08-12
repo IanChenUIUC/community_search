@@ -8,11 +8,12 @@ sys.path.insert(0, "${root}/slurm/cmds")
 from _driver import tee_streams, use_pyarrow_libs
 
 INDPTR_PQ  = "${csr-format.indptr_pq}"
-COMPONENTS = "${icebug-shellstruct.components}"
-TREE       = "${icebug-shellstruct.tree}"
+COMPONENTS = "${stat-icebug-shellstruct.components}"
+TREE       = "${stat-icebug-shellstruct.tree}"
 GBBS_BIN   = "${gbbs-format.bin}"
 KCORE      = "${gbbs}/bazel-bin/benchmarks/KCore/JulienneDBS17/KCore_main"
 STATS      = "${stats}"
+CORESIZES  = "${coresizes}"
 TIMING     = "${timing}"
 MYTIME     = "${mytime}".split()
 ICEBUG     = "${icebug}"
@@ -37,7 +38,7 @@ rho, kmax = reported.group(1), reported.group(2)
 subprocess.run(["vmtouch", "-t", INDPTR_PQ, COMPONENTS, TREE], check=True)
 subprocess.run([*MYTIME, "-o", TIMING, "--",
                 IB_PY, f"{ICEBUG}/network-stats-extended.py",
-                INDPTR_PQ, COMPONENTS, TREE, STATS], check=True)
+                INDPTR_PQ, COMPONENTS, TREE, STATS, CORESIZES], check=True)
 
 with open(STATS, "a", newline="") as f:
     csv.writer(f).writerows([["degeneracy", kmax], ["peeling_complexity", rho]])
