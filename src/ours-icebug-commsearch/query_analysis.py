@@ -36,18 +36,24 @@ def coreness_queries(graph, shell, scores, size, threshold=0.99, num=100, seed=1
 
 @click.command()
 @click.argument("network")
-def main(network):
-    indptr = _read_column(f"../../input/{network}.indptr.feather", "indptr")
-    indices = _read_column(f"../../input/{network}.indices.feather", "indices")
+@click.argument("indptr_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("indices_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("components_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("tree_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("centrality_csv", type=click.Path(exists=True, dir_okay=False))
+@click.argument("output_csv", type=click.Path(dir_okay=False))
+def main(network, indptr_path, indices_path, components_path, tree_path,
+         centrality_csv, output_csv):
+    indptr = _read_column(indptr_path, "indptr")
+    indices = _read_column(indices_path, "indices")
 
     n, m = len(indptr) - 1, len(indices) // 2
     graph = nk.Graph.fromCSR(n, directed=False, out_indices=indices, out_indptr=indptr)
 
     shell = nk.scd.ShellStruct(graph)
-    shell.load(f"{network}.components.parquet", f"{network}.tree.parquet")
+    shell.load(components_path, tree_path)
 
-    centrality = pd.read_csv(f"{network}.centrality.csv")
-    centrality.head()
+    centrality = pd.read_csv(centrality_csv)
 
     columns = ["network", "centrality", "size", "threshold", "cores"]
     data = []
@@ -61,7 +67,8 @@ def main(network):
             data.append([network, c, s, t, value])
 
     df = pd.DataFrame(data, columns=columns)
-    df.to_csv(f"{network}.query_analysis.csv", index=False)
+    pathlib.Path(output_csv).parent.mkdir(exist_ok=True, parents=True)
+    df.to_csv(output_csv, index=False)
 
 
 if __name__ == "__main__":

@@ -8,14 +8,14 @@ from _driver import tee_streams, use_pyarrow_libs
 INDPTR    = "${csr-format.indptr}"
 INDICES   = "${csr-format.indices}"
 QUERYBASE = "${traincs-genquery.querybase}"
-CORES     = "${cores}"
+CORES     = "${icebug-core-decomp.cores}"
 SHELL     = "${shell}"
 DIR       = "${dir}"
 TIMING    = "${timing}"
-THREADS   = "${slurm.cpus}"
 MYTIME    = "${mytime}".split()
 ICEBUG    = "${icebug}"
 PYTHON    = "${icebug}/.venv/bin/python"
+THREADS   = "${slurm.cpus}"
 
 SIZES = [int(s) for s in "${traincs-genquery.sizes}".split()]
 
@@ -31,13 +31,10 @@ def query(size):
 tee_streams("${stdout}", "${stderr}")
 use_pyarrow_libs(PYTHON)
 
-subprocess.run(["vmtouch", "-t", INDPTR, INDICES], check=True)
-
-timed("coredecomp", PYTHON, f"{ICEBUG}/core_decomposition.py",
-      INDPTR, INDICES, CORES, "--threads", THREADS)
+subprocess.run(["vmtouch", "-t", INDPTR, INDICES, CORES], check=True)
 
 timed("shellstruct-offline", PYTHON, f"{ICEBUG}/build_shellstruct.py",
-      INDPTR, INDICES, SHELL, CORES)
+      INDPTR, INDICES, SHELL, CORES, "--threads", THREADS)
 
 for size in SIZES:
     timed(f"shellstruct-online-n{size}", PYTHON, f"{ICEBUG}/query_shellstruct.py",

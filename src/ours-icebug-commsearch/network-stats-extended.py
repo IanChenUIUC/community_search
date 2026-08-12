@@ -1,3 +1,6 @@
+import csv
+import pathlib
+
 import click
 import numpy as np
 import pyarrow as pa
@@ -13,8 +16,9 @@ import networkit as nk
 @click.argument("indptr_path", type=click.Path(exists=True, dir_okay=False))
 @click.argument("components_path", type=click.Path(exists=True, dir_okay=False))
 @click.argument("tree_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("output_csv", type=click.Path(dir_okay=False))
 @click.option("--fraction", default=0.01, type=float)
-def main(indptr_path, components_path, tree_path, fraction):
+def main(indptr_path, components_path, tree_path, output_csv, fraction):
     indptr = pq.read_table(indptr_path)["indptr"].combine_chunks().to_numpy()
     degrees = np.diff(indptr)
 
@@ -41,7 +45,20 @@ def main(indptr_path, components_path, tree_path, fraction):
     top = np.argpartition(degrees, -k)[-k:]
     roots = components[top]
     m = degrees.sum() / 2
-    print(cores_sizes[roots].mean(), cores_volumes[roots].mean() / (2 * m))
+
+    stats = {
+        "communities": int((coreness != 0).sum()),
+        "avg_community_size": float(cores_sizes[roots].mean()),
+        "avg_community_size_fraction": float(cores_sizes[roots].mean() / len(degrees)),
+        "avg_volume_fraction": float(cores_volumes[roots].mean() / (2 * m)),
+    }
+    pathlib.Path(output_csv).parent.mkdir(exist_ok=True, parents=True)
+    with open(output_csv, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["stat", "value"])
+        writer.writerows(stats.items())
+    for stat, value in stats.items():
+        print(f"{stat} = {value}")
 
 
 if __name__ == "__main__":

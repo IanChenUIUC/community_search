@@ -1,5 +1,4 @@
 import sys
-import pathlib
 
 import click
 import networkit as nk
@@ -19,11 +18,6 @@ def _read_column(path: str, column: str) -> pa.Array:
     sys.exit(1)
 
 
-def single_query(graph, valid, size, rng):
-    while True:
-        query = rng.choice(valid, 1)
-
-
 @click.command()
 @click.argument("indptr_path", type=click.Path(exists=True, dir_okay=False))
 @click.argument("indices_path", type=click.Path(exists=True, dir_okay=False))
@@ -37,16 +31,17 @@ def main(indptr_path, indices_path, outfile):
     n, m = len(indptr) - 1, len(indices) // 2
     graph = nk.Graph.fromCSR(n, directed=False, out_indices=indices, out_indptr=indptr)
 
-    cc = nk.components.CoreDecomposition(graph).run()
+    cc = nk.components.ParallelConnectedComponents(graph).run()
     deg = nk.centrality.DegreeCentrality(graph).run().scores()
     valid = np.flatnonzero(deg >= np.quantile(deg, 0.99))  # top 1%
 
     def single_query(size):
-        while True:
+        for _ in range(1_000):
             query = rng.choice(valid, size, replace=False)
             labels = [cc.componentOfNode(q) for q in query]
             if all(label == labels[0] for label in labels):
                 return query
+        raise RuntimeError("single query failed after 1000 trials")
 
     queries = []
     for _ in range(20):

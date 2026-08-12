@@ -9,11 +9,13 @@ root   = "/u/ianchen3/community_search"
 input  = "${root}/input"
 output = "${root}/output"
 
-all      = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster",
-            "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"]
-testing  = ["bitcoin", "dbpedia_link", "friendster", "livejournal",
-            "microsoft_concept", "twitter_social", "wikipedia_link"]
-training = ["abm14", "cen"]
+all_networks      = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster",
+                     "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"]
+testing_networks  = ["bitcoin", "dbpedia_link", "friendster", "livejournal",
+                     "microsoft_concept", "twitter_social", "wikipedia_link"]
+training_networks = ["abm14", "cen"]
+
+threadcounts = [1, 2, 4, 8, 16, 32, 48, 64]
 
 util     = "${root}/src/utilities"
 icebug   = "${root}/src/ours-icebug-commsearch"
@@ -53,13 +55,14 @@ ${mytime} -o ${timing} -- bash -c "
   cd ${icebug} && uv sync
   cd ${pycs} && uv sync
   cd ${genq} && uv sync
+  cd ${root}/src/lbug-core-decomposition && uv sync
 " 1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
 [recipe.gbbs-format]
 array  = true
 slurm  = { mem = "256GB" }
-params = { dataset = "all" }
+params = { dataset = "all_networks" }
 deps   = ["build"]
 
 dir    = "${output}/${dataset}/gbbs-format"
@@ -71,6 +74,7 @@ bin    = "${input}/${dataset}.gbbs.bin"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${input}/${dataset}.csv
 ${mytime} -o ${timing} -- \
   ${util}/csv2gbbs.sh  \
     ${input}/${dataset}.csv \
@@ -85,7 +89,7 @@ ${mytime} -a -o ${timing} -- \
 
 [recipe.pkc-format]
 array  = true
-params = { dataset = "all" }
+params = { dataset = "all_networks" }
 deps   = ["build"]
 
 dir    = "${output}/${dataset}/pkc-format"
@@ -96,6 +100,7 @@ adj    = "${input}/${dataset}.pkc.adj"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${input}/${dataset}.csv
 ${mytime} -o ${timing} -- \
   ${util}/csv2pkc.sh  \
     ${input}/${dataset}.csv \
@@ -105,7 +110,7 @@ ${mytime} -o ${timing} -- \
 
 [recipe.nk-format]
 array  = true
-params = { dataset = "training" }
+params = { dataset = "training_networks" }
 deps   = ["build"]
 
 dir    = "${output}/${dataset}/nk-format"
@@ -116,6 +121,7 @@ bin    = "${input}/${dataset}.nk.bin"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${input}/${dataset}.csv
 ${mytime} -o ${timing} -- \
   ${nkit}/.venv/bin/python ${nkit}/csv2nk.py \
     --edgelist ${input}/${dataset}.csv \
@@ -125,7 +131,7 @@ ${mytime} -o ${timing} -- \
 
 [recipe.csr-format]
 array  = true
-params = { dataset = "all" }
+params = { dataset = "all_networks" }
 deps   = ["build"]
 slurm  = { cpus = 1 }
 
@@ -134,11 +140,13 @@ stdout    = "${dir}/stdout.txt"
 stderr    = "${dir}/stderr.txt"
 timing    = "${dir}/timing.txt"
 indptr    = "${input}/${dataset}.indptr.feather"
+indptr_pq = "${input}/${dataset}.indptr.parquet"
 indices   = "${input}/${dataset}.indices.feather"
 indices32 = "${input}/${dataset}.indices32.feather"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${input}/${dataset}.csv
 ${mytime} -o ${timing} -- \
   ${util}/.venv/bin/python ${util}/csv2csr.py  \
     ${input}/${dataset}.csv \
@@ -156,31 +164,35 @@ ${mytime} -a -o ${timing} -- \
   1> >(tee -a ${stdout}) 2> >(tee -a ${stderr} >&2)
 """
 
-### Removing Ladybug from the experiment
-# [recipe.lbug-format]
-# array   = true
-# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-# deps    = ["build"]
+[recipe.lbug-format]
+array  = true
+params = { dataset = "training_networks" }
+deps   = ["build"]
+slurm  = { cpus = 1 }
 
-# stdout  = "${output}/${dataset}/lbug-format/stdout.txt"
-# stderr  = "${output}/${dataset}/lbug-format/stderr.txt"
-# timing  = "${output}/${dataset}/lbug-format/timing.txt"
+dir     = "${output}/${dataset}/lbug-format"
+stdout  = "${dir}/stdout.txt"
+stderr  = "${dir}/stderr.txt"
+timing  = "${dir}/timing.txt"
+indptr  = "${input}/${dataset}.lbug.indptr.parquet"
+indices = "${input}/${dataset}.lbug.indices.parquet"
 
-# command = """
-# mkdir -p ${output}/${dataset}/lbug-format
-# uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-#   uv run --project ${root}/src/utilities ${root}/src/utilities/csv2csr.py  \
-#     ${input}/${dataset}.csv \
-#     ${input}/${dataset}.lbug \
-#     --no-symmetrize \
-#   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
-# """
+command = """
+mkdir -p ${dir}
+vmtouch -t ${input}/${dataset}.csv
+${mytime} -o ${timing} -- \
+  ${util}/.venv/bin/python ${util}/csv2csr.py \
+    ${input}/${dataset}.csv \
+    ${input}/${dataset}.lbug \
+    --no-symmetrize \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+"""
 
 [recipe.traincd-gbbs-core-decomp]
 array  = true
-params = { dataset = "training" }
+params = { dataset = "training_networks" }
 deps   = ["gbbs-format(dataset=${dataset})"]
-slurm  = { cpus = 16, exclusive = true }
+slurm  = { cpus = 16 }
 
 dir    = "${output}/${dataset}/traincd-gbbs-core-decomp"
 stdout = "${dir}/stdout.txt"
@@ -190,6 +202,7 @@ cores  = "${dir}/cores.csv"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${gbbs-format.bin}
 export PARLAY_NUM_THREADS=${slurm.cpus}
 ${mytime} -o ${timing} -- \
   ${gbbs}/bazel-bin/benchmarks/KCore/JulienneDBS17/KCore_main -s -b -rounds 1 \
@@ -200,9 +213,9 @@ ${mytime} -o ${timing} -- \
 
 [recipe.traincd-ucr-core-decomp]
 array  = true
-params = { dataset = "training" }
+params = { dataset = "training_networks" }
 deps   = ["gbbs-format(dataset=${dataset})"]
-slurm  = { cpus = 16, exclusive = true }
+slurm  = { cpus = 16 }
 
 dir    = "${output}/${dataset}/traincd-ucr-core-decomp"
 stdout = "${dir}/stdout.txt"
@@ -213,6 +226,7 @@ ucr    = "${root}/src/ucrparlay-core-decomposition"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${gbbs-format.bin}
 export PARLAY_NUM_THREADS=${slurm.cpus}
 ${mytime} -o ${timing} -- \
   ${ucr}/KCore/kcore -s \
@@ -224,9 +238,9 @@ ${mytime} -o ${timing} -- \
 
 [recipe.traincd-pkc-core-decomp]
 array  = true
-params = { dataset = "training" }
+params = { dataset = "training_networks" }
 deps   = ["pkc-format(dataset=${dataset})"]
-slurm  = { cpus = 16, exclusive = true }
+slurm  = { cpus = 16 }
 
 dir    = "${output}/${dataset}/traincd-pkc-core-decomp"
 stdout = "${dir}/stdout.txt"
@@ -237,6 +251,7 @@ pkc    = "${root}/src/pkc-core-decomposition"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${pkc-format.adj}
 export OMP_NUM_THREADS=${slurm.cpus}
 ${mytime} -o ${timing} -- \
   ${pkc}/pkc.exe \
@@ -245,31 +260,35 @@ ${mytime} -o ${timing} -- \
   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
-### removing Ladybug from the experiment
-# [recipe.lbug-core-decomp]
-# array   = true
-# params  = { dataset = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"] }
-# deps    = ["lbug-format(dataset=${dataset})"]
+[recipe.traincd-lbug-core-decomp]
+array  = true
+params = { dataset = "training_networks" }
+deps   = ["lbug-format(dataset=${dataset})"]
+slurm  = { cpus = 16 }
 
-# stdout  = "${output}/${dataset}/lbug-core-decomp/stdout.txt"
-# stderr  = "${output}/${dataset}/lbug-core-decomp/stderr.txt"
-# timing  = "${output}/${dataset}/lbug-core-decomp/timing.txt"
+dir    = "${output}/${dataset}/traincd-lbug-core-decomp"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+cores  = "${dir}/cores.csv"
+lbug   = "${root}/src/lbug-core-decomposition"
 
-# command = """
-# mkdir -p ${output}/${dataset}/lbug-core-decomp
-# uv run --project ${root}/src/utilities ${root}/src/utilities/mytime.py -a -o ${timing} -- \
-#   uv run --project ${root}/src/lbug-core-decomposition ${root}/src/lbug-core-decomposition/main.py \
-#     ${input}/${dataset}.lbug.indptr.parquet \
-#     ${input}/${dataset}.lbug.indices.parquet \
-#     ${output}/${dataset}/lbug-core-decomp/cores.csv \
-#   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
-# """
+command = """
+mkdir -p ${dir}
+vmtouch -t ${lbug-format.indptr} ${lbug-format.indices}
+${mytime} -o ${timing} -- \
+  ${lbug}/.venv/bin/python ${lbug}/main.py \
+    ${lbug-format.indptr} \
+    ${lbug-format.indices} \
+    ${cores} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+"""
 
 [recipe.traincd-nk-core-decomp]
 array  = true
-params = { dataset = "training" }
+params = { dataset = "training_networks" }
 deps   = ["nk-format(dataset=${dataset})"]
-slurm  = { cpus = 16, exclusive = true }
+slurm  = { cpus = 16 }
 
 dir    = "${output}/${dataset}/traincd-nk-core-decomp"
 stdout = "${dir}/stdout.txt"
@@ -279,6 +298,7 @@ cores  = "${dir}/cores.csv"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${nk-format.bin}
 ${mytime} -o ${timing} -- \
   ${nkit}/.venv/bin/python ${nkit}/main.py \
     --graph ${nk-format.bin} \
@@ -289,9 +309,9 @@ ${mytime} -o ${timing} -- \
 
 [recipe.icebug-core-decomp]
 array  = true
-params = { dataset = "all" }
+params = { dataset = "all_networks" }
 deps   = ["csr-format(dataset=${dataset})"]
-slurm  = { cpus = 16, exclusive = true }
+slurm  = { cpus = 16 }
 
 dir    = "${output}/${dataset}/icebug-core-decomp"
 stdout = "${dir}/stdout.txt"
@@ -301,6 +321,7 @@ cores  = "${dir}/cores.csv"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${csr-format.indptr} ${csr-format.indices}
 ${ld_icebug}
 ${mytime} -o ${timing} -- \
   ${icebug}/.venv/bin/python ${icebug}/core_decomposition.py \
@@ -313,7 +334,7 @@ ${mytime} -o ${timing} -- \
 
 [recipe.network-stats]
 array  = true
-params = { dataset = "all" }
+params = { dataset = "all_networks" }
 deps   = ["csr-format(dataset=${dataset})"]
 
 dir    = "${output}/${dataset}/network-stats"
@@ -323,6 +344,7 @@ timing = "${dir}/timing.txt"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${csr-format.indptr} ${csr-format.indices}
 ${ld_icebug}
 ${mytime} -o ${timing} -- \
   ${icebug}/.venv/bin/python ${icebug}/network-stats.py \
@@ -332,7 +354,7 @@ ${mytime} -o ${timing} -- \
 """
 
 [recipe.centrality]
-params = { dataset = "training" }
+params = { dataset = "training_networks" }
 deps   = ["nk-format(dataset=${dataset})"]
 
 dir    = "${output}/${dataset}/centrality"
@@ -343,6 +365,7 @@ result = "${dir}/centrality.csv"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${nk-format.bin}
 ${mytime} -o ${timing} -- \
   ${nkit}/.venv/bin/python ${nkit}/centrality.py \
     --graph ${nk-format.bin} \
@@ -352,7 +375,7 @@ ${mytime} -o ${timing} -- \
 
 [recipe.icebug-shellstruct]
 array  = true
-params = { dataset = "all" }
+params = { dataset = "all_networks" }
 deps   = ["csr-format(dataset=${dataset})"]
 
 dir    = "${output}/${dataset}/icebug-shellstruct"
@@ -360,9 +383,12 @@ stdout = "${dir}/stdout.txt"
 stderr = "${dir}/stderr.txt"
 timing = "${dir}/timing.txt"
 shell  = "${dir}/shell"
+components = "${dir}/shell.components.feather"
+tree       = "${dir}/shell.tree.feather"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${csr-format.indptr} ${csr-format.indices}
 ${ld_icebug}
 ${mytime} -o ${timing} -- \
   ${icebug}/.venv/bin/python ${icebug}/build_shellstruct.py \
@@ -375,8 +401,24 @@ ${mytime} -o ${timing} -- \
 ## shellstruct-analysis was done interactively here... via src/ours-icebug-commsearch/analyze_shellstruct.py
 """
 
+[recipe.network-stats-extended]
+array  = true
+params = { dataset = "all_networks" }
+deps   = ["csr-format(dataset=${dataset})", "gbbs-format(dataset=${dataset})",
+          "icebug-shellstruct(dataset=${dataset})"]
+slurm  = { cpus = 16, mem = "256GB" }
+
+dir    = "${output}/${dataset}/network-stats-extended"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+stats  = "${dir}/stats.csv"
+
+interpreter  = "${util}/.venv/bin/python"
+command_file = "cmds/network-stats-extended.py"
+
 [recipe.cold-warm]
-params = { dataset = "training" }
+params = { dataset = "training_networks" }
 deps   = ["csr-format(dataset=${dataset})"]
 
 dir      = "${output}/${dataset}/cold-warm"
@@ -390,7 +432,7 @@ interpreter  = "${util}/.venv/bin/python"
 command_file = "cmds/cold-warm.py"
 
 [recipe.pyvib-query]
-params = { dataset = "training" }
+params = { dataset = "training_networks" }
 deps   = ["csr-format(dataset=${dataset})", "icebug-core-decomp(dataset=${dataset})"]
 
 dir    = "${output}/${dataset}/pyvib-query"
@@ -404,7 +446,7 @@ command_file = "cmds/pyvib-query.py"
 
 [recipe.genquery]
 array  = true
-params = { dataset = "testing" }
+params = { dataset = "testing_networks" }
 deps   = ["csr-format(dataset=${dataset})"]
 
 dir       = "${output}/${dataset}/genquery"
@@ -419,11 +461,36 @@ timing    = "${dir}/timing"
 interpreter  = "${util}/.venv/bin/python"
 command_file = "cmds/genquery.py"
 
+[recipe.testing-core-decomp]
+array  = true
+params = { dataset = "testing_networks" }
+deps   = ["csr-format(dataset=${dataset})"]
+slurm  = { cpus = 16 }
+
+dir    = "${output}/${dataset}/testing-core-decomp"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+cores  = "${dir}/cores.csv"
+
+command = """
+mkdir -p ${dir}
+vmtouch -t ${csr-format.indptr} ${csr-format.indices}
+${ld_icebug}
+${mytime} -o ${timing} -- \
+  ${icebug}/.venv/bin/python ${icebug}/core_decomposition.py \
+    ${csr-format.indptr} \
+    ${csr-format.indices} \
+    ${cores} \
+    --threads ${slurm.cpus} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+"""
+
 [recipe.testing-steiner]
 array      = true
 array_axes = ["rep", "size", "batch"]
-params     = { dataset = "testing", rep = "genquery.reps", size = "genquery.sizes", batch = "genquery.batches" }
-deps       = ["genquery(dataset=${dataset})", "csr-format(dataset=${dataset})", "icebug-core-decomp(dataset=${dataset})"]
+params     = { dataset = "testing_networks", rep = "genquery.reps", size = "genquery.sizes", batch = "genquery.batches" }
+deps       = ["genquery(dataset=${dataset})", "csr-format(dataset=${dataset})", "testing-core-decomp(dataset=${dataset})"]
 
 dir    = "${output}/${dataset}/testing-steiner"
 stdout = "${dir}/stdout.txt"
@@ -438,7 +505,7 @@ ${mytime} -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
   ${pycs}/.venv/bin/python ${pycs}/query_steiner.py \
     ${csr-format.indptr} \
     ${csr-format.indices32} \
-    ${icebug-core-decomp.cores} \
+    ${testing-core-decomp.cores} \
     ${genquery.querybase}-n${size}-b${batch}-r20/query${rep}.csv \
     ${dir}/querytimes-n${size}-b${batch}-rep${rep}.csv \
     -t ${slurm.cpus} -b ${batch} \
@@ -447,9 +514,8 @@ ${mytime} -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
 
 [recipe.testing-par-shellstruct-offline]
 array  = true
-params = { dataset = "testing" }
-deps   = ["csr-format(dataset=${dataset})", "icebug-core-decomp(dataset=${dataset})"]
-slurm  = { exclusive = true }
+params = { dataset = "testing_networks" }
+deps   = ["csr-format(dataset=${dataset})", "testing-core-decomp(dataset=${dataset})"]
 
 dir    = "${output}/${dataset}/testing-par-shellstruct"
 stdout = "${dir}/offline-stdout.txt"
@@ -459,45 +525,37 @@ shell  = "${dir}/shell"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${csr-format.indptr} ${csr-format.indices} ${testing-core-decomp.cores}
 ${ld_icebug}
 ${mytime} -o ${timing} -- \
   ${icebug}/.venv/bin/python ${icebug}/build_shellstruct.py \
     ${csr-format.indptr} \
     ${csr-format.indices} \
     ${shell} \
-    ${icebug-core-decomp.cores} \
+    ${testing-core-decomp.cores} \
+    --threads ${slurm.cpus} \
   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
 [recipe.testing-par-shellstruct-online]
-array      = true
-array_axes = ["rep", "size", "batch"]
-params     = { dataset = "testing", rep = "genquery.reps", size = "genquery.sizes", batch = "genquery.batches" }
-deps       = ["testing-par-shellstruct-offline(dataset=${dataset})", "genquery(dataset=${dataset})"]
-slurm      = { cpus = 1 }
+array  = true
+params = { dataset = "testing_networks" }
+deps   = ["testing-par-shellstruct-offline(dataset=${dataset})", "genquery(dataset=${dataset})"]
+slurm  = { cpus = 1 }
 
 dir    = "${output}/${dataset}/testing-par-shellstruct"
 stdout = "${dir}/stdout.txt"
 stderr = "${dir}/stderr.txt"
 timing = "${dir}/timing"
 
-command = """
-mkdir -p ${dir}
-${ld_pycs}
-${mytime} -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
-  ${pycs}/.venv/bin/python ${pycs}/query_shellstruct.py \
-    ${testing-par-shellstruct-offline.shell} \
-    ${genquery.querybase}-n${size}-b${batch}-r20/query${rep}.csv \
-    ${dir}/querytimes-n${size}-b${batch}-rep${rep}.csv \
-    -b ${batch} \
-  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr} >&2)
-"""
+interpreter  = "${util}/.venv/bin/python"
+command_file = "cmds/testing-par-shellstruct-online.py"
 
 [recipe.testing-csk]
 array      = true
 array_axes = ["rep", "size", "batch"]
-params     = { dataset = "testing", rep = "genquery.reps", size = [1], batch = "genquery.batches" }
-deps       = ["genquery(dataset=${dataset})", "icebug-core-decomp(dataset=${dataset})"]
+params     = { dataset = "testing_networks", rep = "genquery.reps", size = [1], batch = "genquery.batches" }
+deps       = ["genquery(dataset=${dataset})", "testing-core-decomp(dataset=${dataset})"]
 slurm      = { cpus = 1 }
 
 dir    = "${output}/${dataset}/testing-csk"
@@ -513,7 +571,7 @@ ${mytime} -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
   ${csk}/main -s \
     ${dir}/n${size}-b${batch}-rep${rep}/ \
     ${input}/${dataset}.csv \
-    ${icebug-core-decomp.cores} \
+    ${testing-core-decomp.cores} \
     ${genquery.querybase}-n${size}-b${batch}-r20/query${rep}.csv \
     --nodelist \
   1> >(tee -a ${stdout}) 2> >(tee -a ${stderr} >&2)
@@ -521,9 +579,9 @@ ${mytime} -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
 
 [recipe.testing-gullo-shellstruct-offline]
 array  = true
-params = { dataset = "testing" }
+params = { dataset = "testing_networks" }
 deps   = ["build"]
-slurm  = { cpus = 1, exclusive = true }
+slurm  = { cpus = 1 }
 
 dir      = "${output}/${dataset}/testing-gullo-shellstruct"
 stdout   = "${dir}/offline-stdout.txt"
@@ -534,6 +592,7 @@ shellbin = "${dir}/shell.bin"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${input}/${dataset}.csv
 ${mytime} -o ${timing} -- \
   ${gullo}/run.sh main.BuildIndex_PKDDJ \
     ${input}/${dataset}.csv \
@@ -544,7 +603,7 @@ ${mytime} -o ${timing} -- \
 [recipe.testing-gullo-shellstruct-online]
 array      = true
 array_axes = ["rep", "size", "batch"]
-params     = { dataset = "testing", rep = "genquery.reps", size = "genquery.sizes", batch = "genquery.batches" }
+params     = { dataset = "testing_networks", rep = "genquery.reps", size = "genquery.sizes", batch = "genquery.batches" }
 deps       = ["testing-gullo-shellstruct-offline(dataset=${dataset})", "genquery(dataset=${dataset})"]
 slurm      = { cpus = 1 }
 
@@ -555,6 +614,7 @@ timing = "${dir}/timing"
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${input}/${dataset}.csv ${testing-gullo-shellstruct-offline.shell}
 ${mytime} -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
   ${gullo}/run.sh main.MyMain \
     -n ${input}/${dataset}.csv \
@@ -568,7 +628,7 @@ ${mytime} -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
 
 [recipe.traincs-genquery]
 array  = true
-params = { dataset = "training" }
+params = { dataset = "training_networks" }
 deps   = ["csr-format(dataset=${dataset})"]
 slurm  = { cpus = 1 }
 
@@ -582,6 +642,7 @@ sizes     = [1, 10]
 
 command = """
 mkdir -p ${dir}
+vmtouch -t ${csr-format.indptr} ${csr-format.indices}
 ${ld_icebug}
 ${mytime} -o ${timing} -- \
   ${genq}/.venv/bin/python ${genq}/gen_query.py \
@@ -601,15 +662,15 @@ ${mytime} -a -o ${timing} -- \
 
 [recipe.traincs-steiner-shell]
 array  = true
-params = { dataset = "training" }
-deps   = ["csr-format(dataset=${dataset})", "traincs-genquery(dataset=${dataset})"]
+params = { dataset = "training_networks" }
+deps   = ["csr-format(dataset=${dataset})", "traincs-genquery(dataset=${dataset})",
+          "icebug-core-decomp(dataset=${dataset})"]
 slurm  = { cpus = 16 }
 
 dir    = "${output}/${dataset}/traincs"
 stdout = "${dir}/stdout.txt"
 stderr = "${dir}/stderr.txt"
 timing = "${dir}/timing"
-cores  = "${dir}/cores.csv"
 shell  = "${dir}/shell"
 
 interpreter  = "${util}/.venv/bin/python"
@@ -618,7 +679,7 @@ command_file = "cmds/traincs-steiner-shell.py"
 [recipe.traincs-local]
 array      = true
 array_axes = ["rep", "size"]
-params     = { dataset = "training", rep = "traincs-genquery.reps", size = "traincs-genquery.sizes", variant = ["local", "local-upper"] }
+params     = { dataset = "training_networks", rep = "traincs-genquery.reps", size = "traincs-genquery.sizes", variant = ["local", "local-upper"] }
 deps       = ["csr-format(dataset=${dataset})", "traincs-genquery(dataset=${dataset})"]
 slurm      = { cpus = 16 }
 
@@ -629,3 +690,101 @@ timing = "${dir}/timing"
 
 interpreter  = "${util}/.venv/bin/python"
 command_file = "cmds/traincs-local.py"
+
+[recipe.strongscaling-genquery]
+array  = true
+params = { dataset = "all_networks" }
+deps   = ["csr-format(dataset=${dataset})"]
+slurm  = { cpus = 1 }
+
+dir       = "${output}/${dataset}/strongscaling"
+stdout    = "${dir}/genquery-stdout.txt"
+stderr    = "${dir}/genquery-stderr.txt"
+timing    = "${dir}/genquery-timing.txt"
+size      = 5
+batch     = 32
+nreps     = 10
+querybase = "${dir}/genquery-n${size}-b${batch}-r${nreps}"
+
+command = """
+mkdir -p ${dir}
+vmtouch -t ${csr-format.indptr} ${csr-format.indices}
+${ld_icebug}
+${mytime} -o ${timing} -- \
+  ${genq}/.venv/bin/python ${genq}/gen_query.py \
+    ${csr-format.indptr} \
+    ${csr-format.indices} \
+    ${querybase} \
+    -n ${size} -b ${batch} -r ${nreps} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+"""
+
+[recipe.strongscaling-core-decomp]
+array      = true
+array_axes = ["dataset"]
+params     = { dataset = "all_networks", threads = "threadcounts" }
+deps       = ["csr-format(dataset=${dataset})"]
+slurm      = { cpus = "${threads}", mem = "128GB" }
+
+dir    = "${output}/${dataset}/strongscaling"
+stdout = "${dir}/coredecomp-stdout-t${threads}.txt"
+stderr = "${dir}/coredecomp-stderr-t${threads}.txt"
+timing = "${dir}/coredecomp-timing-t${threads}.txt"
+cores  = "${dir}/cores-t${threads}.csv"
+
+command = """
+mkdir -p ${dir}
+vmtouch -t ${csr-format.indptr} ${csr-format.indices}
+${ld_icebug}
+${mytime} -o ${timing} -- \
+  ${icebug}/.venv/bin/python ${icebug}/core_decomposition.py \
+    ${csr-format.indptr} \
+    ${csr-format.indices} \
+    ${cores} \
+    --threads ${threads} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+"""
+
+[recipe.strongscaling-shellstruct]
+array      = true
+array_axes = ["dataset"]
+params     = { dataset = "all_networks", threads = "threadcounts" }
+deps       = ["csr-format(dataset=${dataset})",
+              "strongscaling-core-decomp(dataset=${dataset}, threads=${threads})"]
+slurm      = { cpus = "${threads}", mem = "128GB" }
+
+dir    = "${output}/${dataset}/strongscaling"
+stdout = "${dir}/shellstruct-stdout-t${threads}.txt"
+stderr = "${dir}/shellstruct-stderr-t${threads}.txt"
+timing = "${dir}/shellstruct-timing-t${threads}.txt"
+shell  = "${dir}/shell-t${threads}"
+
+command = """
+mkdir -p ${dir}
+vmtouch -t ${csr-format.indptr} ${csr-format.indices} ${strongscaling-core-decomp.cores}
+${ld_icebug}
+${mytime} -o ${timing} -- \
+  ${icebug}/.venv/bin/python ${icebug}/build_shellstruct.py \
+    ${csr-format.indptr} \
+    ${csr-format.indices} \
+    ${shell} \
+    ${strongscaling-core-decomp.cores} \
+    --threads ${threads} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+"""
+
+[recipe.strongscaling-steiner]
+array      = true
+array_axes = ["dataset"]
+params     = { dataset = "all_networks", threads = "threadcounts" }
+deps       = ["csr-format(dataset=${dataset})", "strongscaling-genquery(dataset=${dataset})",
+              "strongscaling-core-decomp(dataset=${dataset}, threads=${threads})"]
+slurm      = { cpus = "${threads}", mem = "128GB" }
+
+dir    = "${output}/${dataset}/strongscaling"
+stdout = "${dir}/steiner-stdout-t${threads}.txt"
+stderr = "${dir}/steiner-stderr-t${threads}.txt"
+timing = "${dir}/steiner-timing-t${threads}"
+
+interpreter  = "${util}/.venv/bin/python"
+command_file = "cmds/strongscaling-steiner.py"

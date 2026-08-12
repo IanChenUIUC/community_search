@@ -7,6 +7,7 @@ import subprocess
 # Children inherit the redirected descriptors, so this runs once at startup.
 def tee_streams(out_path, err_path):
     for path, fd in ((out_path, 1), (err_path, 2)):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         r, w = os.pipe()
         subprocess.Popen(["tee", "-a", path], stdin=r, stdout=os.dup(fd))
         os.close(r)

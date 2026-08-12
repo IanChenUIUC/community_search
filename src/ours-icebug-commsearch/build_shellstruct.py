@@ -25,7 +25,12 @@ def _read_column(path: str, column: str) -> pa.Array:
 @click.argument("indices_path", type=click.Path(exists=True, dir_okay=False))
 @click.argument("shell_base_path", type=click.Path(dir_okay=False))
 @click.argument("cores", required=False, type=click.Path(exists=True, dir_okay=False))
-def main(indptr_path, indices_path, shell_base_path, cores):
+@click.option("--threads", type=int, default=None,
+              help="Pin NetworKit to this many threads (default: NetworKit's own).")
+def main(indptr_path, indices_path, shell_base_path, cores, threads):
+    if threads:
+        nk.setNumberOfThreads(threads)
+
     indptr = _read_column(indptr_path, "indptr")
     indices = _read_column(indices_path, "indices")
 

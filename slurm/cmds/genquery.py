@@ -26,6 +26,7 @@ CELLS = [(LABELS[(s, b)], s, b) for s in SIZES for b in BATCHES]
 
 tee_streams("${stdout}", "${stderr}")
 use_pyarrow_libs("${icebug}/.venv/bin/python")
+subprocess.run(["vmtouch", "-t", INDPTR, INDICES], check=True)
 
 for label, size, batch in CELLS:
     subprocess.run(
