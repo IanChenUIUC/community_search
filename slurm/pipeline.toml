@@ -402,11 +402,10 @@ ${mytime} -o ${timing} -- \
 """
 
 [recipe.network-stats-extended]
-array  = true
 params = { dataset = "all_networks" }
 deps   = ["csr-format(dataset=${dataset})", "gbbs-format(dataset=${dataset})",
           "icebug-shellstruct(dataset=${dataset})"]
-slurm  = { cpus = 16, mem = "256GB" }
+slurm  = { cpus = 16, mem = { param = "dataset", default = "128GB", twitter_social = "256GB", friendster = "256GB" } }
 
 dir    = "${output}/${dataset}/network-stats-extended"
 stdout = "${dir}/stdout.txt"
