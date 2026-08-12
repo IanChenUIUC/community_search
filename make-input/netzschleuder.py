@@ -1,12 +1,3 @@
-"""Download networks from netzschleuder and write them in the canonical edge-list
-format: `../input/<dataset>.csv`.
-
-Needs graph_tool, which is not installable from PyPI, so run it under the system
-python rather than a venv:
-
-    /usr/bin/python3 netzschleuder.py livejournal
-"""
-
 import argparse
 import os
 
@@ -27,7 +18,7 @@ NETWORKS = [
     ("livejournal", "livejournal"),
 ]
 
-OUTPUT_DIR = "../input"
+OUTPUT_DIR = "/u/ianchen3/community_search/input"
 
 
 def clean_edges(g):
@@ -46,25 +37,36 @@ def write_csv(E, path):
 
 
 def process(name, dataset):
-    print(f"[{dataset}] downloading {name}...")
+    print(f"[{dataset}] downloading {name}...", flush=True)
     g = ns[name]
 
+    print(f"[{dataset}] cleaning {name}...", flush=True)
+    E, n_nodes = clean_edges(g)
+
+    print(f"[{dataset}] writing {name}...", flush=True)
     E, n_nodes = clean_edges(g)
 
     path = os.path.join(OUTPUT_DIR, f"{dataset}.csv")
     write_csv(E, path)
-    print(f"[{dataset}] wrote {len(E)} edges, {n_nodes} nodes -> {path}")
+
+    print(f"[{dataset}] wrote {len(E)} edges, {n_nodes} nodes -> {path}", flush=True)
 
 
 def main():
+    known = [d for _, d in NETWORKS]
+
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("datasets", nargs="*", default=[d for _, d in NETWORKS],
-                        choices=[d for _, d in NETWORKS])
+    parser.add_argument("datasets", nargs="*", metavar="DATASET",
+                        help=f"any of {', '.join(known)} (default: all of them)")
     args = parser.parse_args()
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    unknown = sorted(set(args.datasets) - set(known))
+    if unknown:
+        parser.error(f"unknown dataset(s) {', '.join(unknown)}; choose from {', '.join(known)}")
+    wanted = args.datasets or known
+
     for name, dataset in NETWORKS:
-        if dataset in args.datasets:
+        if dataset in wanted:
             process(name, dataset)
 
 

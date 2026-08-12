@@ -6,7 +6,7 @@ import tempfile
 
 import format_conversion.format as fmt
 
-OUTPUT_DIR = "../input"
+OUTPUT_DIR = "/u/ianchen3/community_search/input"
 BUILD_NODELIST = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "../src/utilities/build_nodelist.py"
 )
@@ -30,21 +30,20 @@ def process(name, tmpdir):
     edges = os.path.join(tmpdir, f"{name}.edges")
     nodes = os.path.join(tmpdir, f"{name}.nodes.csv")
 
-    print(f"[{name}] downloading {dataset['url']}")
+    print(f"[{name}] downloading {dataset['url']}", flush=True)
     subprocess.run(["wget", "-q", dataset["url"], "-O", edges], check=True)
 
-    print(f"[{name}] building the node list")
+    print(f"[{name}] building the node list", flush=True)
     subprocess.run(
         [sys.executable, BUILD_NODELIST, edges, nodes, *dataset["nodelist_args"]],
         check=True,
     )
 
-    print(f"[{name}] converting -> {OUTPUT_DIR}/{name}.csv")
+    print(f"[{name}] converting -> {OUTPUT_DIR}/{name}.csv", flush=True)
     fmt.convert(
         fmt.GraphDescriptor(edges, dataset["spec"]),
         fmt.GraphDescriptor(os.path.join(OUTPUT_DIR, name), fmt.CsvEdgelist.Write()),
         nodes=fmt.NodeDescriptor(nodes, fmt.Nodelist.Csv(skip_rows=1)),
-        num_threads=os.cpu_count(),
         sort_neighbors=True,
     )
 
@@ -53,12 +52,17 @@ def main():
     parser = argparse.ArgumentParser(
         description="Write the Illinois Databank networks to ../input/<dataset>.csv."
     )
-    parser.add_argument("datasets", nargs="*", default=list(DATASETS), choices=list(DATASETS))
+    parser.add_argument("datasets", nargs="*", metavar="DATASET",
+                        help=f"any of {', '.join(DATASETS)} (default: all of them)")
     args = parser.parse_args()
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    unknown = sorted(set(args.datasets) - set(DATASETS))
+    if unknown:
+        parser.error(f"unknown dataset(s) {', '.join(unknown)}; "
+                     f"choose from {', '.join(DATASETS)}")
+
     with tempfile.TemporaryDirectory() as tmpdir:
-        for name in args.datasets:
+        for name in args.datasets or DATASETS:
             process(name, tmpdir)
 
 

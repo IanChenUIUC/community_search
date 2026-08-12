@@ -12,9 +12,6 @@ CONTAINER=/u/ianchen3/venv/python_bootstrap-sandbox
 
 exec apptainer exec "$CONTAINER" bash -c "
   cd /u/ianchen3/community_search/make-input
-  source .venv/bin/activate
-  python netzschleuder.py
-  uv run --project /u/ianchen3/community_search/src/utilities databank.py cen abm14
+  .venv/bin/python netzschleuder.py
+  uv run --project /u/ianchen3/community_search/src/utilities databank.py
 "
-
-echo "done"
