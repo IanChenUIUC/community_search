@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import pathlib
 
 import click
@@ -15,21 +14,24 @@ METHODS = {"gbbs": "traincd-gbbs-core-decomp",
 
 
 @click.command()
-@click.option("--spec", default=common.SPEC, type=click.Path(exists=True, dir_okay=False))
-@click.option("--log", default=common.LOG, type=click.Path(exists=True, dir_okay=False))
-@click.option("--output", default=common.OUTPUT, type=click.Path(exists=True, file_okay=False))
-@click.option("--out", default=common.ANALYSIS / "train-core-decomp.csv",
-              type=click.Path(dir_okay=False))
-def main(spec, log, output, out):
-    spec = common.load_spec(spec)
-    states = common.task_states(log)
+@click.option("--root", default=pathlib.Path(__file__).resolve().parents[2],
+              type=click.Path(exists=True, file_okay=False),
+              help="repo root holding slurm/, output/ and analysis/")
+def main(root):
+    """Collect the training core-decomposition comparison into analysis/train-core-decomp.csv."""
+    root = pathlib.Path(root)
+    spec = common.load_spec(root / "slurm" / "pipeline.toml")
+    states = common.task_states(root / "slurm" / ".pipeline" / "run.jsonl")
+    output = root / "output"
+    out = root / "analysis" / "train-core-decomp.csv"
+
     networks = spec["defaults"]["training_networks"]
     common.report("traincd-*-core-decomp", networks=len(networks), methods=len(METHODS))
 
     rows = []
     for network in networks:
         for method, recipe in METHODS.items():
-            timing = pathlib.Path(output) / network / recipe / "timing.txt"
+            timing = output / network / recipe / "timing.txt"
             mytime = common.read_mytime(timing)
             status = common.row_status(f"{recipe} {network}", mytime,
                                        states.get(f"{recipe}-{network}"))
@@ -38,8 +40,10 @@ def main(spec, log, output, out):
 
     df = pd.DataFrame(rows, columns=["network", "method", "stat", "value", "status"])
     df.to_csv(out, index=False)
-    print(f"wrote {out}: {len(df)} rows, "
-          f"{(df.status != 'ok').sum() // len(common.MYTIME_KEYS)} cells not ok")
+    cells = df.drop_duplicates(["network", "method"])
+    print(f"wrote {out}: {len(df)} rows, {len(cells)} cells")
+    print(pd.crosstab(cells.method, cells.status, margins=True,
+                      margins_name="total").to_string())
 
 
 if __name__ == "__main__":
