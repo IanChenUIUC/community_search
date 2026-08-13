@@ -2,7 +2,6 @@ input
 input/
 slurm/.pipeline
 
-analysis/*.csv
 analysis/*.pdf
 analysis/*.txt
 
