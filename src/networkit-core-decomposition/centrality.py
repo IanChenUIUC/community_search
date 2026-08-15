@@ -7,13 +7,16 @@ import networkit as nk
 
 
 @click.command()
-@click.option("--graph", required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option("--edgelist", required=True, type=click.Path(exists=True, dir_okay=False))
 @click.option("--output", required=True, type=click.Path(dir_okay=False))
-def stats(graph, output):
+def stats(edgelist, output):
     nk.engineering.setNumberOfThreads(16)
 
     print("reading graph", flush=True)
-    gr = nk.readGraph(graph, nk.Format.NetworkitBinary)
+    # not the .nk.bin: NetworkitBinaryReader's dedup scans the node it is filling, so a
+    # million-degree hub costs O(deg^2), while EdgeListReader's hasEdge scans the smaller
+    # endpoint and stays near-linear
+    gr = nk.graphio.EdgeListReader(",", 0, "s", continuous=True).read(edgelist)
 
     print("running core decomp", flush=True)
     cores = nk.centrality.CoreDecomposition(gr).run().scores()

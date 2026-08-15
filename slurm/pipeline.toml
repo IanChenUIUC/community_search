@@ -381,7 +381,7 @@ ${mytime} -o ${timing} -- \
 [recipe.stat-centrality]
 array  = true
 params = { dataset = "all_networks" }
-deps   = ["nk-format(dataset=${dataset})"]
+deps   = ["build"]
 
 dir    = "${output}/${dataset}/centrality"
 stdout = "${dir}/stdout.txt"
@@ -391,10 +391,10 @@ result = "${dir}/centrality.csv"
 
 command = """
 mkdir -p ${dir}
-vmtouch -t ${nk-format.bin}
+vmtouch -t ${input}/${dataset}.csv
 ${mytime} -o ${timing} -- \
   ${nkit}/.venv/bin/python ${nkit}/centrality.py \
-    --graph ${nk-format.bin} \
+    --edgelist ${input}/${dataset}.csv \
     --output ${result} \
   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
