@@ -8,6 +8,8 @@ import subprocess
 def tee_streams(out_path, err_path):
     for path, fd in ((out_path, 1), (err_path, 2)):
         os.makedirs(os.path.dirname(path), exist_ok=True)
+        # tee appends, so a re-run would otherwise concatenate onto the previous one's log
+        open(path, "w").close()
         r, w = os.pipe()
         subprocess.Popen(["tee", "-a", path], stdin=r, stdout=os.dup(fd))
         os.close(r)

@@ -472,12 +472,16 @@ command_file = "cmds/network-stats-extended.py"
 [recipe.cold-warm]
 params = { dataset = "training_networks" }
 deps   = ["csr-format(dataset=${dataset})"]
+# the simult phases run two processes at once, each pinned to ${threads}, so the
+# allocation is twice that and neither process contends for a core
+slurm  = { cpus = 32 }
 
 dir      = "${output}/${dataset}/cold-warm"
 stdout   = "${dir}/stdout.txt"
 stderr   = "${dir}/stderr.txt"
 timing   = "${dir}/timing"
 cores    = "${dir}/cores.npy"
+threads  = 16
 coldwarm = "${root}/src/cold-warm"
 
 interpreter  = "${util}/.venv/bin/python"

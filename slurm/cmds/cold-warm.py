@@ -11,6 +11,7 @@ CORES    = "${cores}"
 DIR      = "${dir}"
 TIMING   = "${timing}"
 MYTIME   = "${mytime}".split()
+THREADS  = "${threads}"
 COLDWARM = "${coldwarm}"
 PYTHON   = "${coldwarm}/.venv/bin/python"
 
@@ -34,6 +35,14 @@ def run_together(*jobs):
             raise SystemExit(f"cold-warm: {p.args} failed")
 
 
+def coreness(output):
+    return (PYTHON, CORENESS, INDPTR, INDICES, output, "--threads", THREADS)
+
+
+def query():
+    return (PYTHON, QUERY, INDPTR, INDICES, CORES, "--threads", THREADS)
+
+
 def evict_inputs():
     subprocess.run(["vmtouch", "-e", INDPTR, INDICES], check=True)
 
@@ -43,34 +52,55 @@ def evict_cores():
     subprocess.run(["vmtouch", "-e", CORES], check=False)
 
 
+def touch_inputs():
+    subprocess.run(["vmtouch", "-t", INDPTR, INDICES], check=True)
+
+
+def touch_cores():
+    subprocess.run(["vmtouch", "-t", CORES], check=True)
+
+
 tee_streams("${stdout}", "${stderr}")
 use_pyarrow_libs(PYTHON)
 
 ## cold
 evict_inputs()
-run("coldcores", PYTHON, CORENESS, INDPTR, INDICES, CORES)
+run("cold-serial-coreness", *coreness(CORES))
 
 evict_inputs()
 evict_cores()
-run("coldquery", PYTHON, QUERY, INDPTR, INDICES, CORES)
+run("cold-serial-query", *query())
 
-## simultaneous
 evict_inputs()
 run_together(
-    ("simult1coreness", PYTHON, CORENESS, INDPTR, INDICES, f"{DIR}/simult1-cores.npy"),
-    ("simult2coreness", PYTHON, CORENESS, INDPTR, INDICES, f"{DIR}/simult2-cores.npy"),
+    ("cold-simult1-coreness", *coreness(f"{DIR}/simult1-cores.npy")),
+    ("cold-simult2-coreness", *coreness(f"{DIR}/simult2-cores.npy")),
 )
 
 evict_inputs()
 evict_cores()
 run_together(
-    ("simult1query", PYTHON, QUERY, INDPTR, INDICES, CORES),
-    ("simult2query", PYTHON, QUERY, INDPTR, INDICES, CORES),
+    ("cold-simult1-query", *query()),
+    ("cold-simult2-query", *query()),
 )
 
 ## warm
-subprocess.run(["vmtouch", "-t", INDPTR, INDICES], check=True)
-run("warmcoreness", PYTHON, CORENESS, INDPTR, INDICES, CORES)
+touch_inputs()
+run("warm-serial-coreness", *coreness(CORES))
 
-subprocess.run(["vmtouch", "-t", INDPTR, INDICES, CORES], check=True)
-run("warmquery", PYTHON, QUERY, INDPTR, INDICES, CORES)
+touch_inputs()
+touch_cores()
+run("warm-serial-query", *query())
+
+touch_inputs()
+run_together(
+    ("warm-simult1-coreness", *coreness(f"{DIR}/simult1-cores.npy")),
+    ("warm-simult2-coreness", *coreness(f"{DIR}/simult2-cores.npy")),
+)
+
+touch_inputs()
+touch_cores()
+run_together(
+    ("warm-simult1-query", *query()),
+    ("warm-simult2-query", *query()),
+)
