@@ -18,13 +18,13 @@ The ShellStruct format is written to two feather files:
 
 where the components table is sized to the number of vertices in the graph, and the tree to the number of vertices in the ShellStruct index.
 the components table maps the vertices to the tree node index, under the "assignment" column.
-the tree table contains four columns:
+the tree table contains three columns:
 
 - the coreness of each node
 - the vertices of each treenode (as a LargeList)
-- the indptr and indices of the tree
+- the children of each treenode (as a LargeList)
 
-where the indices has an additional padding (a tree of `n` nodes has `n-1` edges), and the `indptr` is missing the implicit `n` at the end.
+both LargeLists are `large_list<uint64>`, so each row of the table describes one tree node.
 
 The `network-stats-extended.py` script then analyzes the shellstruct, writing two CSVs: the per-network statistics (community count, average community size and volume as fractions), and each possible maximal k-core community in the graph with its size.
 

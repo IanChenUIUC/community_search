@@ -190,19 +190,11 @@ class ShellStruct(SelectiveCommunityDetector):
 
     def save(self, components_path, tree_path, compression: str = "zstd") -> None:
         components = pa.table({"assignment": pa.array(self.assign.astype(np.uint64))})
-        vertices = pa.LargeListArray.from_arrays(
-            pa.array(self.node_vertices.indptr, pa.int64()),
-            pa.array(self.node_vertices.values.astype(np.uint64)),
-        )
-        indices = pa.array(
-            list(self.tree.values.astype(np.uint64)) + [None], type=pa.uint64()
-        )
         tree = pa.table(
             {
                 "coreness": pa.array(self.node_coreness.astype(np.uint64)),
-                "vertices": vertices,
-                "csr_indptr": pa.array(self.tree.indptr[:-1].astype(np.uint64)),
-                "csr_indices": indices,
+                "vertices": _csr_to_list(self.node_vertices),
+                "children": _csr_to_list(self.tree),
             }
         )
         _write_ipc(components, components_path, compression)
@@ -222,25 +214,23 @@ class ShellStruct(SelectiveCommunityDetector):
             tree_tbl.column("coreness").combine_chunks().to_numpy().astype(CORE_DTYPE)
         )
 
-        indptr = tree_tbl.column("csr_indptr").combine_chunks().to_numpy()
-        indices = tree_tbl.column("csr_indices").combine_chunks()
-        tree_indices = (
-            indices.slice(0, len(indices) - 1)  # undo the trailing-null pad
-            .to_numpy(zero_copy_only=False)
-            .astype(NODE_DTYPE)
-        )
-        tree_indptr = np.append(indptr, len(tree_indices)).astype(OFFSET_DTYPE)
-        tree = CSR(tree_indptr, tree_indices)
-
-        vv = tree_tbl.column("vertices").combine_chunks()
-        off = vv.offsets.to_numpy().astype(OFFSET_DTYPE)
-        nv_indptr = np.ascontiguousarray(off - off[0])
-        nv_flat = vv.values.to_numpy()[off[0] : off[-1]].astype(NODE_DTYPE)
-        node_vertices = CSR(nv_indptr, nv_flat)
+        tree = _list_to_csr(tree_tbl.column("children").combine_chunks())
+        node_vertices = _list_to_csr(tree_tbl.column("vertices").combine_chunks())
 
         root = int(np.argmin(node_coreness))  # the unique coreness-0 node
         lca = build_lca(tree, root)
         return cls(assign, node_coreness, node_vertices, tree, lca, root)
+
+
+def _csr_to_list(csr: CSR) -> pa.LargeListArray:
+    return pa.LargeListArray.from_arrays(
+        pa.array(csr.indptr, pa.int64()), pa.array(csr.values.astype(np.uint64))
+    )
+
+
+def _list_to_csr(array: pa.LargeListArray) -> CSR:
+    indptr = array.offsets.to_numpy().astype(OFFSET_DTYPE)
+    return CSR(indptr, array.values.to_numpy().astype(NODE_DTYPE))
 
 
 def _write_ipc(table, path, compression: str) -> None:

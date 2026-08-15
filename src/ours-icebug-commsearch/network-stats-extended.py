@@ -4,7 +4,6 @@ import pathlib
 import click
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 import pyarrow.feather as pf
 import pyarrow.parquet as pq
 
@@ -52,10 +51,10 @@ def main(indptr_path, components_path, tree_path, output_csv, coresizes_csv, fra
     sizes = np.bincount(components, minlength=n)
     volumes = np.bincount(components, weights=degrees, minlength=n)
 
-    indices = tree_table.column("csr_indices").combine_chunks().slice(0, n - 1)
-    indptr = tree_table.column("csr_indptr").combine_chunks()
-    indptr = pa.concat_arrays([indptr, pa.array([len(indices)], type=pa.uint64())])
-    tree = nk.Graph.fromCSR(n, directed=False, out_indices=indices, out_indptr=indptr)
+    children = tree_table.column("children").combine_chunks()
+    tree = nk.Graph.fromCSR(
+        n, directed=False, out_indices=children.values, out_indptr=children.offsets
+    )
 
     cores_sizes = subtree_sizes(tree, root, sizes)
     cores_volumes = subtree_sizes(tree, root, volumes)

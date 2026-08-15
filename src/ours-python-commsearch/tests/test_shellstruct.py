@@ -182,9 +182,8 @@ def test_saved_schema_is_icebug(tmp_path, chain343):
     assert comp.schema.field("assignment").type == pa.uint64()
     assert tree.schema.field("coreness").type == pa.uint64()
     assert tree.schema.field("vertices").type == pa.large_list(pa.uint64())
-    assert tree.schema.field("csr_indptr").type == pa.uint64()
-    assert tree.schema.field("csr_indices").type == pa.uint64()
+    assert tree.schema.field("children").type == pa.large_list(pa.uint64())
+    assert tree.column_names == ["coreness", "vertices", "children"]
     num = len(chain343.node_coreness)
     assert all(len(tree.column(c)) == num for c in tree.column_names)  # length-matched
-    # trailing null on indices, dropped last offset on indptr
-    assert tree.column("csr_indices")[-1].as_py() is None
+    assert tree.column("children").combine_chunks().null_count == 0
