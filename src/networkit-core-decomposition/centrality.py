@@ -10,13 +10,15 @@ import networkit as nk
 @click.option("--graph", required=True, type=click.Path(exists=True, dir_okay=False))
 @click.option("--output", required=True, type=click.Path(dir_okay=False))
 def stats(graph, output):
-    gr = nk.readGraph(graph, nk.Format.NetworkitBinary)
     nk.engineering.setNumberOfThreads(16)
+
+    print("reading graph", flush=True)
+    gr = nk.readGraph(graph, nk.Format.NetworkitBinary)
 
     print("running core decomp", flush=True)
     cores = nk.centrality.CoreDecomposition(gr).run().scores()
     print("running lcc", flush=True)
-    lcc = nk.centrality.LocalClusteringCoefficient(gr).run().scores()
+    lcc = nk.centrality.LocalClusteringCoefficient(gr, turbo=True).run().scores()
     print("running pr", flush=True)
     pr = nk.centrality.PageRank(gr).run().scores()
     print("running deg", flush=True)
