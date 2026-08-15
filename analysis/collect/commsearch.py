@@ -10,40 +10,27 @@ COLUMNS = ["experiment", "network", "method", "stage", "size", "batch", "rep",
            "stat", "value", "status"]
 
 
-NO_QUERY = object()
+STAGE_AT = 3
 
 
-def emit(rows, key, mytime, status, query_s=NO_QUERY):
-    """Append one long-format row per mytime stat, plus query_s for stages that have one."""
-    for stat in common.MYTIME_KEYS:
-        rows.append([*key, stat, (mytime or {}).get(stat), status])
-    if query_s is not NO_QUERY:
-        rows.append([*key, "query_s", query_s, status])
+def testing_shared(network, out, states):
+    """Prerequisite stages per online method, from each recipe's deps: gullo reads the raw
+    edge list so it needs no core decomposition."""
+    core = common.read_stage(out, states, network, "testing-core-decomp", "timing.txt",
+                             f"testing-core-decomp-{network}")
+    par = common.read_stage(out, states, network, "testing-par-shellstruct",
+                            "offline-timing.txt",
+                            f"testing-par-shellstruct-offline-{network}")
+    gullo = common.read_stage(out, states, network, "testing-gullo-shellstruct",
+                              "offline-timing.txt",
+                              f"testing-gullo-shellstruct-offline-{network}")
+    return {"steiner": [("core-decomp", *core)],
+            "csk": [("core-decomp", *core)],
+            "par-shellstruct": [("core-decomp", *core), ("offline", *par)],
+            "shellstruct": [("offline", *gullo)]}
 
 
-def shared_rows(network, out, states):
-    """The per-network stages every online cell shares, with the cell axes left empty."""
-    stages = [
-        ("ib-core-decomp", "core-decomp",
-         out / network / "testing-core-decomp" / "timing.txt",
-         f"testing-core-decomp-{network}"),
-        ("par-shellstruct", "offline",
-         out / network / "testing-par-shellstruct" / "offline-timing.txt",
-         f"testing-par-shellstruct-offline-{network}"),
-        ("shellstruct", "offline",
-         out / network / "testing-gullo-shellstruct" / "offline-timing.txt",
-         f"testing-gullo-shellstruct-offline-{network}"),
-    ]
-
-    rows = []
-    for method, stage, timing, node in stages:
-        mytime = common.read_mytime(timing)
-        emit(rows, ["testing", network, method, stage, None, None, None],
-             mytime, common.row_status(node, mytime, states.get(node)))
-    return rows
-
-
-def steiner_rows(network, out, states, cells):
+def steiner_rows(network, out, states, cells, shared):
     """testing-steiner: one array task per cell, pycs querytimes."""
     d = out / network / "testing-steiner"
     rows = []
@@ -51,13 +38,15 @@ def steiner_rows(network, out, states, cells):
         cell = f"n{size}-b{batch}-rep{rep}"
         node = f"testing-steiner-{network}-{rep}-{size}-{batch}"
         mytime = common.read_mytime(d / f"timing-{cell}.txt")
-        emit(rows, ["testing", network, "steiner", "online", size, batch, rep],
-             mytime, common.row_status(f"{node} {cell}", mytime, states.get(node)),
-             common.querytimes(d / f"querytimes-{cell}.csv", "pycs"))
+        key = ["testing", network, "steiner", "online", size, batch, rep]
+        common.emit(rows, key, mytime,
+                    common.row_status(f"{node} {cell}", mytime, states.get(node)),
+                    common.querytimes(d / f"querytimes-{cell}.csv", "pycs"))
+        common.emit_shared(rows, key, shared, STAGE_AT)
     return rows
 
 
-def par_shellstruct_rows(network, out, states, cells):
+def par_shellstruct_rows(network, out, states, cells, shared):
     """testing-par-shellstruct-online: one job walks every cell, so all cells share its state."""
     d = out / network / "testing-par-shellstruct"
     node = f"testing-par-shellstruct-online-{network}"
@@ -67,13 +56,15 @@ def par_shellstruct_rows(network, out, states, cells):
     for size, batch, rep in cells:
         cell = f"n{size}-b{batch}-rep{rep}"
         mytime = common.read_mytime(d / f"timing-{cell}.txt")
-        emit(rows, ["testing", network, "par-shellstruct", "online", size, batch, rep],
-             mytime, common.row_status(f"{node} {cell}", mytime, task),
-             common.querytimes(d / f"querytimes-{cell}.csv", "pycs"))
+        key = ["testing", network, "par-shellstruct", "online", size, batch, rep]
+        common.emit(rows, key, mytime,
+                    common.row_status(f"{node} {cell}", mytime, task),
+                    common.querytimes(d / f"querytimes-{cell}.csv", "pycs"))
+        common.emit_shared(rows, key, shared, STAGE_AT)
     return rows
 
 
-def gullo_rows(network, out, states, cells):
+def gullo_rows(network, out, states, cells, shared):
     """testing-gullo-shellstruct-online: timing comes from its own per-query log."""
     d = out / network / "testing-gullo-shellstruct"
     rows = []
@@ -81,13 +72,15 @@ def gullo_rows(network, out, states, cells):
         cell = f"n{size}-b{batch}-rep{rep}"
         node = f"testing-gullo-shellstruct-online-{network}-{rep}-{size}-{batch}"
         mytime = common.read_mytime(d / f"timing-{cell}.txt")
-        emit(rows, ["testing", network, "shellstruct", "online", size, batch, rep],
-             mytime, common.row_status(f"{node} {cell}", mytime, states.get(node)),
-             common.gullo_timing(d / f"gullo-{cell}.log"))
+        key = ["testing", network, "shellstruct", "online", size, batch, rep]
+        common.emit(rows, key, mytime,
+                    common.row_status(f"{node} {cell}", mytime, states.get(node)),
+                    common.gullo_timing(d / f"gullo-{cell}.log"))
+        common.emit_shared(rows, key, shared, STAGE_AT)
     return rows
 
 
-def csk_rows(network, out, states, cells, sizes):
+def csk_rows(network, out, states, cells, sizes, shared):
     """testing-csk: declared for one query size only, and logs `queryid,ms` per query."""
     d = out / network / "testing-csk"
     rows = []
@@ -97,9 +90,11 @@ def csk_rows(network, out, states, cells, sizes):
         cell = f"n{size}-b{batch}-rep{rep}"
         node = f"testing-csk-{network}-{rep}-{size}-{batch}"
         mytime = common.read_mytime(d / f"timing-{cell}.txt")
-        emit(rows, ["testing", network, "csk", "online", size, batch, rep],
-             mytime, common.row_status(f"{node} {cell}", mytime, states.get(node)),
-             common.csk_timing(d / cell / "timing.log"))
+        key = ["testing", network, "csk", "online", size, batch, rep]
+        common.emit(rows, key, mytime,
+                    common.row_status(f"{node} {cell}", mytime, states.get(node)),
+                    common.csk_timing(d / cell / "timing.log"))
+        common.emit_shared(rows, key, shared, STAGE_AT)
     return rows
 
 
@@ -112,36 +107,30 @@ def testing_rows(spec, states, out):
 
     rows = []
     for network in spec["defaults"]["testing_networks"]:
-        rows += shared_rows(network, out, states)
-        rows += steiner_rows(network, out, states, cells)
-        rows += par_shellstruct_rows(network, out, states, cells)
-        rows += gullo_rows(network, out, states, cells)
-        rows += csk_rows(network, out, states, cells, csk_sizes)
+        shared = testing_shared(network, out, states)
+        rows += steiner_rows(network, out, states, cells, shared["steiner"])
+        rows += par_shellstruct_rows(network, out, states, cells, shared["par-shellstruct"])
+        rows += gullo_rows(network, out, states, cells, shared["shellstruct"])
+        rows += csk_rows(network, out, states, cells, csk_sizes, shared["csk"])
     return rows
 
 
-def training_shared_rows(network, out, states):
-    """The per-network stages training's online cells share."""
-    stages = [
-        ("ib-core-decomp", "core-decomp",
-         out / network / "traincd-icebug-core-decomp" / "timing.txt",
-         f"traincd-icebug-core-decomp-{network}"),
-        ("par-shellstruct", "offline",
-         out / network / "traincs" / "timing-shellstruct-offline.txt",
-         f"traincs-steiner-shell-{network}"),
-    ]
-
-    rows = []
-    for method, stage, timing, node in stages:
-        mytime = common.read_mytime(timing)
-        emit(rows, ["training", network, method, stage, None, None, None],
-             mytime, common.row_status(node, mytime, states.get(node)))
-    return rows
+def training_shared(network, out, states):
+    """Prerequisite stages per online method. query_local.py takes no coreness, so local
+    and local-upper require nothing."""
+    core = common.read_stage(out, states, network, "traincd-icebug-core-decomp",
+                             "timing.txt", f"traincd-icebug-core-decomp-{network}")
+    offline = common.read_stage(out, states, network, "traincs",
+                                "timing-shellstruct-offline.txt",
+                                f"traincs-steiner-shell-{network}")
+    return {"steiner": [("core-decomp", *core)],
+            "par-shellstruct": [("core-decomp", *core), ("offline", *offline)],
+            "local": [], "local-upper": []}
 
 
-def training_batch_rows(network, out, states, sizes, reps):
-    """traincs steiner and par-shellstruct run the 20 reps sequentially in one process per
-    size, so their process stats belong to the size and only query_s varies by rep."""
+def training_batch_rows(network, out, states, sizes, reps, shared):
+    """traincs steiner and par-shellstruct pack the reps into one process per size, so each
+    rep cell repeats that process's stats and takes its own query_s."""
     d = out / network / "traincs"
     node = f"traincs-steiner-shell-{network}"
 
@@ -156,11 +145,10 @@ def training_batch_rows(network, out, states, sizes, reps):
             times = common.querytimes_rows(d / querytimes)
             status = common.row_status(f"{node} {method} n{size}", mytime,
                                        states.get(node))
-            emit(rows, ["training", network, method, "online", size, 1, None],
-                 mytime, status)
             for rep in reps:
-                rows.append(["training", network, method, "online", size, 1, rep,
-                             "query_s", (times or {}).get(rep), status])
+                key = ["training", network, method, "online", size, 1, rep]
+                common.emit(rows, key, mytime, status, (times or {}).get(rep))
+                common.emit_shared(rows, key, shared[method], STAGE_AT)
     return rows
 
 
@@ -172,9 +160,9 @@ def training_local_rows(network, out, states, sizes, reps):
         node = f"traincs-local-{network}-{rep}-{size}-{variant}"
         mytime = common.read_mytime(d / f"timing-{variant}-n{size}-rep{rep}.txt")
         times = common.querytimes_rows(d / f"{variant}-querytimes-n{size}-rep{rep}.csv")
-        emit(rows, ["training", network, variant, "online", size, 1, rep],
-             mytime, common.row_status(node, mytime, states.get(node)),
-             (times or {}).get(0))
+        common.emit(rows, ["training", network, variant, "online", size, 1, rep],
+                    mytime, common.row_status(node, mytime, states.get(node)),
+                    (times or {}).get(0))
     return rows
 
 
@@ -185,8 +173,8 @@ def training_rows(spec, states, out):
 
     rows = []
     for network in spec["defaults"]["training_networks"]:
-        rows += training_shared_rows(network, out, states)
-        rows += training_batch_rows(network, out, states, sizes, reps)
+        shared = training_shared(network, out, states)
+        rows += training_batch_rows(network, out, states, sizes, reps, shared)
         rows += training_local_rows(network, out, states, sizes, reps)
     return rows
 
@@ -202,14 +190,6 @@ def main(root):
     states = common.task_states(root / "slurm" / ".pipeline" / "run.jsonl")
     out = root / "output"
     csv = root / "analysis" / "commsearch.csv"
-
-    genquery = spec["recipe"]["genquery"]
-    common.report("testing", networks=len(spec["defaults"]["testing_networks"]),
-                  reps=len(genquery["reps"]), sizes=len(genquery["sizes"]),
-                  batches=len(genquery["batches"]))
-    traincs = spec["recipe"]["traincs-genquery"]
-    common.report("training", networks=len(spec["defaults"]["training_networks"]),
-                  reps=len(traincs["reps"]), sizes=len(traincs["sizes"]))
 
     df = pd.DataFrame(testing_rows(spec, states, out)
                       + training_rows(spec, states, out), columns=COLUMNS)

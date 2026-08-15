@@ -26,7 +26,6 @@ def main(root):
     out = root / "analysis" / "train-core-decomp.csv"
 
     networks = spec["defaults"]["training_networks"]
-    common.report("traincd-*-core-decomp", networks=len(networks), methods=len(METHODS))
 
     rows = []
     for network in networks:

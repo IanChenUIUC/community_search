@@ -1,5 +1,4 @@
 import json
-import math
 import pathlib
 import re
 import sys
@@ -15,6 +14,8 @@ RANGE = re.compile(r"^(-?\d+)\.\.(-?\d+)$")
 GULLO_QUERY = re.compile(r"query (\d+): size=(\d+), time=(\d+)ms")
 OOM = {"OUT_OF_MEMORY"}
 TIMEOUT = {"TIMEOUT", "DEADLINE"}
+
+NO_QUERY = object()
 
 
 def expand_ranges(v):
@@ -92,6 +93,28 @@ def row_status(cell, mytime, task):
     return "failed" if kind == "ok" else kind
 
 
+def emit(rows, key, mytime, status, query_s=NO_QUERY):
+    """Append one long-format row per mytime stat, plus query_s for stages that have one."""
+    for stat in MYTIME_KEYS:
+        rows.append([*key, stat, (mytime or {}).get(stat), status])
+    if query_s is not NO_QUERY:
+        rows.append([*key, "query_s", query_s, status])
+
+
+def emit_shared(rows, key, shared, stage_at):
+    """Repeat a cell's prerequisite stages onto it, so one filter on the cell keys gives
+    its whole cost and each stage keeps its own status. `stage_at` is the stage column's
+    position in `key`, which differs per collector."""
+    for stage, mytime, status in shared:
+        emit(rows, [*key[:stage_at], stage, *key[stage_at + 1:]], mytime, status)
+
+
+def read_stage(out, states, network, recipe, filename, node):
+    """A prerequisite stage's mytime and status, ready to sit in a `shared` list."""
+    mytime = read_mytime(out / network / recipe / filename)
+    return mytime, row_status(node, mytime, states.get(node))
+
+
 def querytimes(path, package):
     """Total query seconds for a cell: the "all" row for pycs, the row sum for icebug."""
     rows = querytimes_rows(path)
@@ -130,10 +153,3 @@ def gullo_timing(path):
     times = [int(m.group(3)) for m in GULLO_QUERY.finditer(path.read_text())]
     return sum(times) / 1000 if times else None
 
-
-def report(recipe, **axes):
-    """Print and return the declared cell count for one recipe, as a multiplication."""
-    shape = " x ".join(f"{n} {name}" for name, n in axes.items())
-    cells = math.prod(axes.values())
-    print(f"reading {recipe}: {shape} = {cells} cells")
-    return cells
