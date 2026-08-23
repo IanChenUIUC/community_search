@@ -18,7 +18,7 @@ To run each methods, we ingest in an edgelist with contiguous node ids, in a csv
 The header is `source,target`, and all edges are present once (undirected graph).
 
 The exact commands, as well as resources given for each method, are in the `slurm/pipeline.toml` file.
-This `toml` structure follows the specification according to [cc-slurm](https://github.com/IanChenUIUC/cc-slurm), as of version `v1.0.0`.
+This `toml` structure follows the specification according to [cc-slurm](https://github.com/IanChenUIUC/cc-slurm), as of version `v1.0.1`.
 
 # Notes
 
