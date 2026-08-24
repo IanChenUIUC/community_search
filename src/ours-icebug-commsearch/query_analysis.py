@@ -22,16 +22,16 @@ def _read_column(path: str, column: str) -> pa.Array:
     sys.exit(1)
 
 
-def coreness_queries(graph, shell, scores, size, threshold=0.99, num=100, seed=1234):
-    valid = np.flatnonzero(scores >= np.quantile(scores, threshold))
-    rng = np.random.default_rng(seed)
+def coreness_queries(shell, cc, rng, valid, size, num=100):
+    def single_query(size):
+        for _ in range(1_000):
+            query = rng.choice(valid, size, replace=False)
+            labels = [cc.componentOfNode(q) for q in query]
+            if all(label == labels[0] for label in labels):
+                return query
+        raise RuntimeError("single query failed after 1000 trials")
 
-    coreness = []
-    for _ in range(num):
-        query = rng.choice(valid, size)
-        coreness.append(shell.score(query))
-
-    return coreness
+    return [shell.score(single_query(size)) for _ in range(num)]
 
 
 @click.command()
@@ -50,6 +50,9 @@ def main(network, indptr_path, indices_path, components_path, tree_path,
     n, m = len(indptr) - 1, len(indices) // 2
     graph = nk.Graph.fromCSR(n, directed=False, out_indices=indices, out_indptr=indptr)
 
+    rng = np.random.default_rng(1234)
+    cc = nk.components.ParallelConnectedComponents(graph).run()
+
     shell = nk.scd.ShellStruct(graph)
     shell.load(components_path, tree_path)
 
@@ -59,11 +62,16 @@ def main(network, indptr_path, indices_path, components_path, tree_path,
     data = []
 
     cent = ["coreness", "c_coef", "pagerank", "degree"]
-    sizes = [1, 2, 3, 5, 10, 25, 100, 300]
-    thresholds = [0, 0.9, 0.99, 0.999, 0.9999]
+    sizes = [1, 5, 10, 20]
+    thresholds = [0, 0.9, 0.99, 0.999]
     for c, s, t in tqdm.tqdm(list(it.product(cent, sizes, thresholds))):
-        cores = coreness_queries(graph, shell, centrality[c].to_numpy(), s, t)
-        for value in cores:
+        scores = centrality[c].to_numpy()
+        valid = np.flatnonzero(scores >= np.quantile(scores, t))
+        if len(valid) < s:
+            print(f"skipping {c} size={s} threshold={t}: only {len(valid)} candidates",
+                  file=sys.stderr)
+            continue
+        for value in coreness_queries(shell, cc, rng, valid, s):
             data.append([network, c, s, t, value])
 
     df = pd.DataFrame(data, columns=columns)
