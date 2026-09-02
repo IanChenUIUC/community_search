@@ -46,7 +46,7 @@ data |>
     legend.position = "bottom",
     plot.margin = margin(b = -10, t = 5, r = 5, l = 5)
   )
-ggsave("warm-train-core-decomp.pdf", width = 122, height = 80, units = "mm")
+ggsave("warm-train-core-decomp.pdf", width = 122, height = 60, units = "mm")
 
 data <- read_parquet("cold-train-core-decomp.parquet")
 data |> head()
@@ -82,7 +82,7 @@ data |>
     legend.position = "bottom",
     plot.margin = margin(b = -10, t = 5, r = 5, l = 5)
   )
-ggsave("cold-train-core-decomp.pdf", width = 122, height = 80, units = "mm")
+ggsave("cold-train-core-decomp.pdf", width = 122, height = 60, units = "mm")
 
 
 #### ============ community search =============
@@ -133,6 +133,17 @@ offline |>
 offline |>
   filter(status == "timeout") |>
   count(network, method, stage)
+
+## one palette for both commsearch figures, so a method keeps its colour
+## whichever figure it appears in
+METHOD_COLORS <- c(
+  "SteinerKCore" = "#F8766D",
+  "Par-ShellStruct" = "#7CAE00",
+  "LocalKCore" = "#00BFC4",
+  "LocalKCore(u)" = "#C77CFF",
+  "CSK" = "#00A9FF",
+  "ShellStruct" = "#FF61CC"
+)
 
 ### figure: training comparison of our own three methods
 
@@ -187,6 +198,7 @@ data |>
     name = "Time (s)", transform = "log10",
     breaks = c(1, 10, 100, 1000, 4 * 60 * 60)
   ) +
+  scale_fill_manual(name = "", values = METHOD_COLORS) +
   theme(
     strip.text = element_text(size = 10),
     axis.title = element_text(size = 12),
@@ -217,6 +229,7 @@ do_plot <- function(df) {
       n_fail = sum(status != "ok"),
       n = n(),
       worst = max(status),
+      se = sd(time) / sqrt(n()),
       .groups = "drop"
     ) |>
     mutate(
@@ -230,9 +243,9 @@ do_plot <- function(df) {
       ),
       network = factor(network, levels = NETWORKS)
     ) |>
-    ggplot(aes(x = network, y = wall_s)) +
+    ggplot(aes(x = network, y = wall_s, fill = method)) +
     geom_col(position = position_dodge2(width = 0.9, preserve = "single")) +
-    geom_errorbar(aes(ymin = wall_s_q1, ymax = wall_s_q3),
+    geom_errorbar(aes(ymin = wall_s - 2 * se, ymax = wall_s + 2 * se),
       position = position_dodge2(width = 0.9, preserve = "single")
     ) +
     geom_text(aes(y = 1, label = reason),
@@ -242,14 +255,18 @@ do_plot <- function(df) {
     geom_hline(yintercept = 4 * 60 * 60, linetype = "dashed", color = "orange") +
     theme_bw() +
     scale_x_discrete(name = "") +
+    coord_trans(y = "log10", ylim = c(0.1, 4 * 60 * 60)) +
     scale_y_continuous(
-      name = "Runtime (s)", transform = "log10",
-      breaks = c(1, 10, 100, 1000, 4 * 60 * 60)
+      name = "Runtime (s)",
+      breaks = c(0.1, 1, 10, 100, 1000, 4 * 60 * 60),
+      labels = c("0.1", "1", "10", "100", "1000", "14400")
     ) +
+    scale_fill_manual(name = "", values = METHOD_COLORS) +
     theme(
       axis.title = element_text(size = 12),
       axis.text = element_text(size = 10, angle = 20, hjust = 1),
       legend.text = element_text(size = 8),
+      legend.title = element_blank(),
       legend.position = "bottom",
       legend.box.spacing = unit(3, "pt"),
       legend.margin = margin(0, 0, 0, 0),
@@ -259,7 +276,8 @@ do_plot <- function(df) {
 }
 
 testing <- data |>
-  filter(experiment == "testing") |>
+  filter(experiment == "testing", stage != "core-decomp") |>
+  # filter(experiment == "testing") |>
   pivot_wider(names_from = stat, values_from = value) |>
   mutate(status = factor(status,
     levels = c("ok", "timeout", "oom", "failed", "absent"), ordered = TRUE
@@ -267,7 +285,10 @@ testing <- data |>
   group_by(network, method, size, batch, rep) |>
   summarise(
     time = sum(if_else(stage == "online", coalesce(query_s, wall_s), wall_s)),
-    status = max(status),
+    status = if_else(any(stage != "online" & status != "ok"),
+      max(status[stage != "online"]),
+      max(status)
+    ),
     .groups = "drop"
   ) |>
   mutate(time = if_else(status == "ok", time, 4 * 60 * 60))
@@ -275,27 +296,57 @@ testing <- data |>
 testing |>
   filter(size == 1, batch == 1) |>
   do_plot()
-ggsave("test-commsearch-n1-b1.pdf", width = 122, height = 80, units = "mm")
+ggsave("test-commsearch-n1-b1.pdf", width = 122, height = 60, units = "mm")
 
 testing |>
   filter(size != 1, batch == 1) |>
   do_plot()
-ggsave("test-commsearch-n>1-b1.pdf", width = 122, height = 80, units = "mm")
+ggsave("test-commsearch-n>1-b1.pdf", width = 122, height = 60, units = "mm")
 
 testing |>
   filter(size == 1, batch == 100) |>
   do_plot()
-ggsave("test-commsearch-n1-b100.pdf", width = 122, height = 80, units = "mm")
+ggsave("test-commsearch-n1-b100.pdf", width = 122, height = 60, units = "mm")
 
 testing |>
   filter(size != 1, batch == 100) |>
   do_plot()
-ggsave("test-commsearch-n>1-b100.pdf", width = 122, height = 80, units = "mm")
+ggsave("test-commsearch-n>1-b100.pdf", width = 122, height = 60, units = "mm")
+
+testing |>
+  filter(
+    size == 1,
+    method %in% c("csk", "steiner"),
+    !network %in% c("friendster", "twitter_social")
+  ) |>
+  mutate(time = if_else(status == "ok", time, 4 * 60 * 60)) |>
+  group_by(network, batch, rep) |>
+  summarize(speedup = sum(time[method == "csk"]) / sum(time[method == "steiner"])) |>
+  group_by(network, batch) |>
+  summarize(speedup = median(speedup)) |>
+  pivot_wider(names_from = batch, values_from = speedup)
 
 #### ============ strong scaling =============
 
 data <- read_parquet("strongscaling.parquet")
 data |> head()
+
+data |>
+  pivot_wider(names_from = stat, values_from = value) |>
+  group_by(network, method, threads, rep) |>
+  summarize(
+    time = sum(if_else(stage == "online", coalesce(query_s, wall_s), wall_s)),
+    status = max(status),
+    .groups = "drop"
+  ) |>
+  mutate(time = if_else(status == "ok", time, 4 * 60 * 60)) |>
+  group_by(network, method, threads) |>
+  summarize(time = mean(time), .groups = "drop") |>
+  group_by(network, method) |>
+  mutate(speedup = time[threads == 1] / time) |>
+  ungroup() |>
+  select(network, method, threads, speedup) |>
+  pivot_wider(names_from = threads, values_from = speedup)
 
 METHODS <- c("steiner", "par-shellstruct")
 NETWORKS <- c(
@@ -369,3 +420,155 @@ ggsave("strongscaling-line-time.pdf", width = 122, height = 80, units = "mm")
 
 scaling |> do_plot(rss, "Peak RSS (GB)", 0.8)
 ggsave("strongscaling-line-mem.pdf", width = 122, height = 80, units = "mm")
+
+
+#### ============ cold, warm, simult =============
+
+data <- read_parquet("cold-warm.parquet")
+data |> head()
+
+## everything is okay
+data |>
+  pivot_wider(names_from = stat, values_from = value) |>
+  filter(status != "ok")
+
+data |>
+  mutate(
+    cache = recode(cache, cold = "Cold Cache", warm = "Warm Cache"),
+    mode = recode(mode, serial = "No Co-Scheduling", simult = "Co-Scheduling")
+  ) |>
+  pivot_wider(names_from = stat, values_from = value) |>
+  group_by(network, mode, cache) |>
+  summarize(wall_s = mean(wall_s)) |>
+  ggplot(aes(x = cache, y = wall_s, fill = mode)) +
+  geom_col(position = "dodge") +
+  facet_grid(rows = vars(network), scales = "free_y") +
+  scale_color_manual(name = "") +
+  scale_x_discrete(name = "") +
+  scale_y_continuous(name = "Runtime (s)") +
+  theme_bw() +
+  theme(
+    strip.text = element_text(size = 10),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    axis.text.x = element_text(size = 10),
+    legend.text = element_text(size = 12),
+    legend.title = element_blank(),
+    legend.position = "bottom",
+    legend.margin = margin(0, 0, 0, 0),
+    plot.margin = margin(b = 2, t = 5, r = 5, l = 5),
+    legend.box.spacing = unit(-10, "pt"),
+  )
+ggsave("cold-warm.pdf", width = 122, height = 60, units = "mm")
+
+#### ============ query analysis =============
+
+data <- read_parquet("query-analysis.parquet")
+data |> head()
+
+## no non-ok datapoints
+data |> filter(status != "ok")
+
+mark_best <- function(df, cols, digits = 1, best = c("max", "min")) {
+  best <- match.arg(best)
+  df <- ungroup(df)
+  picked <- names(tidyselect::eval_select(rlang::enquo(cols), df))
+
+  rank_one <- function(x) {
+    r <- rank(if (best == "max") -x else x, ties.method = "min", na.last = "keep")
+    s <- formatC(x, format = "d", digits = digits)
+    s[which(r == 1)] <- paste0("\\textbf{", s[which(r == 1)], "}")
+    s[which(r == 2)] <- paste0("\\underline{", s[which(r == 2)], "}")
+    s
+  }
+
+  df |>
+    mutate(.row = row_number()) |>
+    pivot_longer(all_of(picked), names_to = ".metric", values_to = ".value") |>
+    group_by(.row) |>
+    mutate(.value = rank_one(.value)) |>
+    ungroup() |>
+    pivot_wider(names_from = ".metric", values_from = ".value") |>
+    select(all_of(names(df)))
+}
+
+### table: threshold==0.99 query coreness, restricted networks
+
+data |>
+  filter(network %in% c("livejournal", "friendster"), threshold == 0.99) |>
+  group_by(network, centrality, threshold) |>
+  summarize(cores = median(cores)) |>
+  select(network, centrality, cores) |>
+  mutate(centrality = factor(centrality,
+    levels = c("coreness", "degree", "pagerank", "c_coef"),
+    labels = c("Coreness", "Degree", "PageRank", "Clustering Coef.")
+  )) |>
+  arrange(centrality) |>
+  pivot_wider(names_from = centrality, values_from = cores) |>
+  mark_best(c(`Clustering Coef.`, `Degree`, `PageRank`)) |>
+  xtable(digits = 0, align = c("l", "l", "r", "r", "r", "r")) |>
+  print(include.rownames = FALSE, sanitize.text.function = identity)
+
+data |>
+  filter(threshold == 0.99) |>
+  group_by(network, centrality, threshold) |>
+  summarize(cores = median(cores)) |>
+  select(network, centrality, cores) |>
+  mutate(centrality = factor(centrality,
+    levels = c("coreness", "degree", "pagerank", "c_coef"),
+    labels = c("Coreness", "Degree", "PageRank", "Clustering Coef.")
+  )) |>
+  arrange(centrality) |>
+  pivot_wider(names_from = centrality, values_from = cores) |>
+  mark_best(c(`Clustering Coef.`, `Degree`, `PageRank`)) |>
+  xtable(digits = 0, align = c("l", "l", "r", "r", "r", "r")) |>
+  print(include.rownames = FALSE, sanitize.text.function = identity)
+
+data |>
+  filter(threshold == 0.999) |>
+  group_by(network, centrality, threshold) |>
+  summarize(cores = median(cores)) |>
+  select(network, centrality, cores) |>
+  mutate(centrality = factor(centrality,
+    levels = c("coreness", "degree", "pagerank", "c_coef"),
+    labels = c("Coreness", "Degree", "PageRank", "Clustering Coef.")
+  )) |>
+  arrange(centrality) |>
+  pivot_wider(names_from = centrality, values_from = cores) |>
+  mark_best(c(`Clustering Coef.`, `Degree`, `PageRank`)) |>
+  xtable(digits = 0, align = c("l", "l", "r", "r", "r", "r")) |>
+  print(include.rownames = FALSE, sanitize.text.function = identity)
+
+### table: network stats
+
+data <- read_parquet("network-stats.parquet")
+data |> head()
+
+## all runs are ok
+data |> filter(status != "ok")
+
+data |>
+  select(network, stat, value) |>
+  pivot_wider(names_from = stat, values_from = value)
+
+#### comparing format time and core decomp time
+
+csr_format <- read_parquet("csr-format.parquet")
+csr_format |> head()
+
+core_decomp <- read_parquet("commsearch.parquet") |>
+  filter(stage == "core-decomp") |>
+  group_by(network, stage, stat, status) |>
+  summarize(value = first(value)) |>
+  ungroup()
+core_decomp |> head()
+
+rbind(core_decomp, csr_format) |>
+  filter(stat == "wall_s", stage %in% c("core-decomp", "csv2csr")) |>
+  select(network, stage, value) |>
+  pivot_wider(names_from = "stage", values_from = value) |>
+  mutate(
+    network = factor(network, levels = NETWORKS),
+    ratio = csv2csr / `core-decomp`
+  ) |>
+  arrange(network)
