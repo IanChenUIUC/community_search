@@ -72,6 +72,22 @@ def read_mytime(path):
     return stats
 
 
+def read_mytimes(path):
+    """The appended mytime records in order, one dict each; `exit_code` opens a new record."""
+    path = pathlib.Path(path)
+    if not path.exists():
+        return []
+
+    records = []
+    for line in path.read_text().splitlines():
+        key, _, value = line.partition("=")
+        if key == "exit_code":
+            records.append({})
+        if key in MYTIME_KEYS and records:
+            records[-1][key] = float(value)
+    return records
+
+
 def row_status(cell, mytime, task):
     """One of ok / oom / timeout / failed / absent for a cell; warns on a source disagreement."""
     state = (task or {}).get("state")

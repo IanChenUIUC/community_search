@@ -56,6 +56,7 @@ ${mytime} -o ${timing} -- bash -c "
   cd ${pycs} && uv sync
   cd ${genq} && uv sync
   cd ${root}/src/lbug-core-decomposition && uv sync
+  cd ${root}/src/abm272-scaling && uv sync
 " 1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 
@@ -859,3 +860,189 @@ timing = "${dir}/steiner-timing-t${threads}"
 
 interpreter  = "${util}/.venv/bin/python"
 command_file = "cmds/strongscaling-steiner.py"
+
+### The abm272 scaling experiment: one network, 25 year-subgraphs spanning ~4 decades of n.
+### Its axes and paths stay on these recipes rather than in [defaults], which is reserved for
+### declarations the whole nine-network experiment shares.
+
+[recipe.abm272-build-network]
+params = { year = "abm272-build-network.years" }
+deps   = ["build"]
+slurm  = { cpus = 4 }
+
+years    = [2026, 2031, 2036, 2041, 2046, 2051, 2056, 2061, 2066, 2071, 2076, 2081,
+            2086, 2091, 2096, 2101, 2106, 2111, 2116, 2121, 2126, 2131, 2136, 2141, 2146]
+pkg      = "${root}/src/abm272-scaling"
+edgelist = "${input}/abm272.edgelist.parquet"
+nodelist = "${input}/abm272.nodelist.parquet"
+
+dir       = "${output}/abm272/${year}/abm272-build-network"
+stdout    = "${dir}/stdout.txt"
+stderr    = "${dir}/stderr.txt"
+timing    = "${dir}/timing.txt"
+base      = "${dir}/graph"
+indptr    = "${base}.indptr.feather"
+indices   = "${base}.indices.feather"
+indices32 = "${base}.indices32.feather"
+
+command = """
+mkdir -p ${dir}
+vmtouch -t ${edgelist} ${nodelist}
+export LD_LIBRARY_PATH=$(
+    ${pkg}/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
+  ):$LD_LIBRARY_PATH
+${mytime} -o ${timing} -- \
+  ${pkg}/.venv/bin/python ${pkg}/prep_year.py \
+    ${edgelist} \
+    ${nodelist} \
+    ${year} \
+    ${base} \
+    --threads ${slurm.cpus} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+${mytime} -a -o ${timing} -- \
+  ${util}/.venv/bin/python ${util}/pq2pf.py -w 32 \
+    ${base}.indices.parquet \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr} >&2)
+mv ${indices} ${indices32}
+${mytime} -a -o ${timing} -- \
+  ${util}/.venv/bin/python ${util}/pq2pf.py \
+    ${base}.indptr.parquet \
+    ${base}.indices.parquet \
+  1> >(tee -a ${stdout}) 2> >(tee -a ${stderr} >&2)
+"""
+
+[recipe.abm272-genquery]
+params = { year = "abm272-build-network.years" }
+deps   = ["abm272-build-network(year=${year})"]
+slurm  = { cpus = 1 }
+
+size      = 5
+batch     = 32
+nreps     = 5
+reps      = "0..4"
+
+dir       = "${output}/abm272/${year}/abm272-genquery"
+stdout    = "${dir}/stdout.txt"
+stderr    = "${dir}/stderr.txt"
+timing    = "${dir}/timing.txt"
+querybase = "${dir}/genquery-n${size}-b${batch}-r${nreps}"
+
+command = """
+mkdir -p ${dir}
+vmtouch -t ${abm272-build-network.indptr} ${abm272-build-network.indices}
+${ld_icebug}
+${mytime} -o ${timing} -- \
+  ${genq}/.venv/bin/python ${genq}/gen_query.py \
+    ${abm272-build-network.indptr} \
+    ${abm272-build-network.indices} \
+    ${querybase} \
+    -n ${size} -b ${batch} -r ${nreps} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+"""
+
+[recipe.abm272-core-decomp]
+params = { year = "abm272-build-network.years" }
+deps   = ["abm272-build-network(year=${year})"]
+slurm  = { cpus = 16 }
+
+dir    = "${output}/abm272/${year}/abm272-core-decomp"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+cores  = "${dir}/cores.csv"
+
+command = """
+mkdir -p ${dir}
+vmtouch -t ${abm272-build-network.indptr} ${abm272-build-network.indices}
+${ld_icebug}
+${mytime} -o ${timing} -- \
+  ${icebug}/.venv/bin/python ${icebug}/core_decomposition.py \
+    ${abm272-build-network.indptr} \
+    ${abm272-build-network.indices} \
+    ${cores} \
+    --threads ${slurm.cpus} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+"""
+
+[recipe.abm272-shellstruct-offline]
+params = { year = "abm272-build-network.years" }
+deps   = ["abm272-build-network(year=${year})", "abm272-core-decomp(year=${year})"]
+slurm  = { cpus = 16 }
+
+dir    = "${output}/abm272/${year}/abm272-shellstruct-offline"
+stdout = "${dir}/stdout.txt"
+stderr = "${dir}/stderr.txt"
+timing = "${dir}/timing.txt"
+shell  = "${dir}/shell"
+
+command = """
+mkdir -p ${dir}
+vmtouch -t ${abm272-build-network.indptr} ${abm272-build-network.indices} ${abm272-core-decomp.cores}
+${ld_icebug}
+${mytime} -o ${timing} -- \
+  ${icebug}/.venv/bin/python ${icebug}/build_shellstruct.py \
+    ${abm272-build-network.indptr} \
+    ${abm272-build-network.indices} \
+    ${shell} \
+    ${abm272-core-decomp.cores} \
+    --threads ${slurm.cpus} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+"""
+
+### The two query recipes array over `rep` alone, so every year is its own job: any
+### (year x method) cell reruns on its own, and a per-year `slurm` mapping stays
+### array-eligible because `year` is a split key rather than an array axis.
+
+[recipe.abm272-steiner]
+array      = true
+array_axes = ["rep"]
+params     = { year = "abm272-build-network.years", rep = "abm272-genquery.reps" }
+deps       = ["abm272-build-network(year=${year})", "abm272-genquery(year=${year})",
+              "abm272-core-decomp(year=${year})"]
+slurm      = { cpus = 16 }
+
+dir    = "${output}/abm272/${year}/abm272-steiner"
+stdout = "${dir}/stdout-rep${rep}.txt"
+stderr = "${dir}/stderr-rep${rep}.txt"
+timing = "${dir}/timing-rep${rep}.txt"
+
+command = """
+mkdir -p ${dir}
+${ld_pycs}
+vmtouch -t ${abm272-build-network.indptr} ${abm272-build-network.indices32} ${abm272-core-decomp.cores}
+${mytime} -o ${timing} -- \
+  ${pycs}/.venv/bin/python ${pycs}/query_steiner.py \
+    ${abm272-build-network.indptr} \
+    ${abm272-build-network.indices32} \
+    ${abm272-core-decomp.cores} \
+    ${abm272-genquery.querybase}/query${rep}.csv \
+    ${dir}/querytimes-rep${rep}.csv \
+    -t ${slurm.cpus} -b ${abm272-genquery.batch} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+"""
+
+[recipe.abm272-shellstruct-online]
+array      = true
+array_axes = ["rep"]
+params     = { year = "abm272-build-network.years", rep = "abm272-genquery.reps" }
+deps       = ["abm272-shellstruct-offline(year=${year})", "abm272-genquery(year=${year})"]
+slurm      = { cpus = 1 }
+
+dir    = "${output}/abm272/${year}/abm272-shellstruct-online"
+stdout = "${dir}/stdout-rep${rep}.txt"
+stderr = "${dir}/stderr-rep${rep}.txt"
+timing = "${dir}/timing-rep${rep}.txt"
+
+command = """
+mkdir -p ${dir}
+${ld_pycs}
+vmtouch -t ${abm272-shellstruct-offline.shell}.components.feather \
+           ${abm272-shellstruct-offline.shell}.tree.feather
+${mytime} -o ${timing} -- \
+  ${pycs}/.venv/bin/python ${pycs}/query_shellstruct.py \
+    ${abm272-shellstruct-offline.shell} \
+    ${abm272-genquery.querybase}/query${rep}.csv \
+    ${dir}/querytimes-rep${rep}.csv \
+    -b ${abm272-genquery.batch} \
+  1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
+"""

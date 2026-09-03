@@ -1,3 +1,5 @@
+"""Build the CSR of the subgraph induced by every node present in or before a given year."""
+
 import sys
 import pathlib
 
@@ -32,7 +34,8 @@ def _scan_nodelist(path: str) -> pl.LazyFrame:
 @click.argument("nodelist_path", type=click.Path(exists=True, dir_okay=False))
 @click.argument("year", type=int)
 @click.argument("output_csr_base", type=click.Path(dir_okay=False))
-def main(edgelist_path, nodelist_path, year, output_csr_base):
+@click.option("--threads", type=int, default=4)
+def main(edgelist_path, nodelist_path, year, output_csr_base, threads):
     pathlib.Path(output_csr_base).parent.mkdir(parents=True, exist_ok=True)
 
     maxid = (
@@ -43,6 +46,9 @@ def main(edgelist_path, nodelist_path, year, output_csr_base):
         .item()
     )
 
+    # The induced node set is [0..maxid], not the ids actually present: passing the real
+    # ids would have format-conversion compact them to row position, renumbering the graph
+    # differently every year. Node ids are stable across years only because of this.
     nodes_path = pathlib.Path(output_csr_base).with_suffix(".nodes.csv")
     pl.DataFrame({"node_id": np.arange(maxid + 1, dtype=np.int64)}).write_csv(nodes_path)
 
@@ -52,7 +58,9 @@ def main(edgelist_path, nodelist_path, year, output_csr_base):
         output_csr_base,
         fmt.CsrParquet.Write(u64_indices=True),
     )
-    fmt.convert(graph_in, graph_out, nodes=nodes, sort_neighbors=True, num_threads=4)
+    fmt.convert(graph_in, graph_out, nodes=nodes, sort_neighbors=True, num_threads=threads)
+
+    print(f"nodes={maxid + 1}")
 
 
 if __name__ == "__main__":

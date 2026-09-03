@@ -10,29 +10,13 @@ COLUMNS = ["network", "stage", "stat", "value", "status"]
 STAGES = ["csv2csr", "pq2pf32", "pq2pf64"]
 
 
-def read_mytimes(path):
-    """The appended mytime records in order, one dict each; `exit_code` opens a new record."""
-    path = pathlib.Path(path)
-    if not path.exists():
-        return []
-
-    records = []
-    for line in path.read_text().splitlines():
-        key, _, value = line.partition("=")
-        if key == "exit_code":
-            records.append({})
-        if key in common.MYTIME_KEYS and records:
-            records[-1][key] = float(value)
-    return records
-
-
 def network_rows(network, out, states):
     """One network's three conversion stages, all run by the single csr-format task."""
     d = out / network / "csr-format"
     node = f"csr-format-{network}"
     task = states.get(node)
 
-    records = read_mytimes(d / "timing.txt")
+    records = common.read_mytimes(d / "timing.txt")
     records += [None] * (len(STAGES) - len(records))
 
     rows = []

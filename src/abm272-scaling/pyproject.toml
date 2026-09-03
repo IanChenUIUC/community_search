@@ -1,0 +1,18 @@
+[project]
+name = "abm272-scaling"
+version = "0.1.0"
+description = "Per-year induced subgraphs of the CANTATAS ABM network, for the k-core scaling experiment"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "click",
+    "format-conversion",
+    "numpy",
+    "polars",
+]
+
+[tool.uv.sources]
+format-conversion = { git = "https://github.com/IanChenUIUC/format-conversion.git" }
+
+[tool.ruff]
+line-length = 100
