@@ -861,10 +861,6 @@ timing = "${dir}/steiner-timing-t${threads}"
 interpreter  = "${util}/.venv/bin/python"
 command_file = "cmds/strongscaling-steiner.py"
 
-### The abm272 scaling experiment: one network, 25 year-subgraphs spanning ~4 decades of n.
-### Its axes and paths stay on these recipes rather than in [defaults], which is reserved for
-### declarations the whole nine-network experiment shares.
-
 [recipe.abm272-build-network]
 params = { year = "abm272-build-network.years" }
 deps   = ["build"]
@@ -887,7 +883,7 @@ indices32 = "${base}.indices32.feather"
 
 command = """
 mkdir -p ${dir}
-vmtouch -t ${edgelist} ${nodelist}
+vmtouch -tf ${edgelist} ${nodelist}
 export LD_LIBRARY_PATH=$(
     ${pkg}/.venv/bin/python -c "import pyarrow; print(pyarrow.get_library_dirs()[0])"
   ):$LD_LIBRARY_PATH

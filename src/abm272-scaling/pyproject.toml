@@ -1,7 +1,7 @@
 [project]
 name = "abm272-scaling"
 version = "0.1.0"
-description = "Per-year induced subgraphs of the CANTATAS ABM network, for the k-core scaling experiment"
+description = ""
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -9,6 +9,7 @@ dependencies = [
     "format-conversion",
     "numpy",
     "polars",
+    "pybind11>=2.12",
 ]
 
 [tool.uv.sources]
