@@ -3,6 +3,7 @@ library(tidyverse)
 library(ggh4x)
 library(xtable)
 library(arrow)
+library(patchwork)
 
 TIMEOUT_S <- 4 * 60 * 60
 
@@ -14,88 +15,133 @@ fail_label <- function(n_fail, n, worst) {
   if_else(n_fail == 0, "", str_c(as.character(worst), " ", n_fail, "/", n))
 }
 
-#### ============ training core decomposition =============
+#### ============ training experiment =============
 
-data <- read_parquet("warm-train-core-decomp.parquet")
-data |> head()
-data |> filter(status != "ok")
+TRAIN_NETWORKS <- c("cen", "abm14")
 
-### figure: 6 core decomp methods runtime
+core_decomp <- read_parquet("cold-train-core-decomp.parquet")
+core_decomp |> head()
 
-data |>
-  pivot_wider(names_from = "stat", values_from = "value") |>
-  mutate(
-    reason = if_else(status == "ok", "", status),
-    time = if_else(reason == "timeout", TIMEOUT_S, wall_s),
-    method = factor(method,
-      levels = c("ib", "ucr", "gbbs", "nk", "pkc", "lbug"),
-      labels = c("icebug", "ucr", "gbbs", "networkit", "pkc", "ladybugdb")
-    )
-  ) |>
-  ggplot(aes(x = method, y = time)) +
-  geom_col(fill = "#ff6666") +
-  geom_text(
-    y = 1,
-    aes(label = reason), angle = 90, colour = "black", vjust = 0.5, hjust = 1,
-  ) +
-  facet_grid(cols = vars(network)) +
-  geom_hline(yintercept = TIMEOUT_S, linetype = "dashed", color = "orange") +
-  theme_bw() +
-  scale_x_discrete(name = "") +
-  scale_y_continuous(
-    name = "time (s)", transform = "log10",
-    breaks = c(1, 10, 100, 1000, TIMEOUT_S)
-  ) +
-  theme(
-    strip.text = element_text(size = 10),
-    axis.title = element_text(size = 12),
-    axis.text = element_text(size = 10),
-    axis.text.x = element_text(size = 10, angle = 15, hjust = 1),
-    legend.text = element_text(size = 12),
-    legend.title = element_blank(),
-    legend.position = "bottom",
-    plot.margin = margin(b = -10, t = 5, r = 5, l = 5)
-  )
-ggsave("warm-train-core-decomp.pdf", width = 122, height = 60, units = "mm")
-
-data <- read_parquet("cold-train-core-decomp.parquet")
-data |> head()
-
-data |>
+core_decomp |>
   filter(stat == "exit_code", value != 0)
-data |>
+core_decomp |>
   filter(stat == "wall_s")
 
-data |>
+fig_core <- core_decomp |>
   select(network, method, stat, value) |>
+  filter(stat == "wall_s") |>
   mutate(
     method = factor(method,
       levels = c("ib", "ucr", "gbbs", "nk", "pkc"),
-      labels = c("Icebug", "UCR", "GBBS", "NetworKit", "PKC")
-    )
+      labels = c("Icebug", "UCR", "GBBS", "NK", "PKC")
+    ),
+    network = factor(network, levels = TRAIN_NETWORKS)
   ) |>
-  filter(stat == "wall_s") |>
-  ggplot(aes(x = method, y = value, fill = network)) +
-  # geom_col(position = "dodge") +
-  geom_col(fill = "#FF6666", position = "dodge") +
-  facet_grid(cols = vars(network)) +
+  ggplot(aes(x = method, y = value)) +
+  geom_col(fill = "grey50", position = "dodge") +
+  facet_grid(rows = vars(network), scales = "free_y") +
   theme_bw() +
-  scale_x_discrete(name = "") +
+  scale_x_discrete(name = "Method") +
   scale_y_continuous(name = "Time (s)") +
   theme(
-    strip.text = element_text(size = 16, face = "bold"),
-    axis.title = element_text(size = 16),
-    axis.text = element_text(size = 14),
-    axis.text.x = element_text(size = 12, angle = 15, hjust = 1),
-    legend.text = element_text(size = 16),
+    strip.text = element_blank(),
+    strip.background = element_blank(),
+    axis.title = element_text(size = 10),
+    axis.text = element_text(size = 9),
+    axis.text.x = element_text(size = 8),
+    axis.title.x = element_text(margin = margin(t = 2)),
+    plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
+  )
+
+train_commsearch <- read_parquet("commsearch.parquet") |> filter(experiment == "training")
+train_commsearch |> head()
+
+## one palette for both commsearch figures, so a method keeps its colour
+## whichever figure it appears in
+METHOD_COLORS <- c(
+  "SteinerKCore" = "#F8766D",
+  "Par-ShellStruct" = "#7CAE00",
+  "LocalKCore" = "#00BFC4",
+  "LocalKCore(u)" = "#C77CFF",
+  "CSK" = "#00A9FF",
+  "ShellStruct" = "#FF61CC"
+)
+
+fig_commsearch <- train_commsearch |>
+  pivot_wider(names_from = stat, values_from = value) |>
+  mutate(status = as_status(status)) |>
+  group_by(network, method, size, rep) |>
+  summarise(
+    time = sum(if_else(stage == "online", coalesce(query_s, wall_s), wall_s)),
+    status = max(status),
+    .groups = "drop"
+  ) |>
+  mutate(time = if_else(status == "ok", time, TIMEOUT_S)) |>
+  group_by(network, method, size) |>
+  summarise(
+    mean_time = mean(time),
+    q1 = quantile(time, 0.10),
+    q3 = quantile(time, 0.90),
+    n_fail = sum(status != "ok"),
+    n = n(),
+    worst = max(status),
+    se = sd(time) / sqrt(n()),
+    .groups = "drop"
+  ) |>
+  mutate(
+    reason = fail_label(n_fail, n, worst),
+    method = factor(method,
+      levels = c("steiner", "par-shellstruct", "local", "local-upper"),
+      labels = c("SteinerKCore", "Par-ShellStruct", "LocalKCore", "LocalKCore(u)")
+    ),
+    network = factor(network, levels = TRAIN_NETWORKS),
+    size = factor(size)
+  ) |>
+  ggplot(aes(x = size, y = mean_time, fill = method)) +
+  geom_col(position = position_dodge2(width = 0.9, preserve = "single"), ) +
+  geom_errorbar(aes(ymin = mean_time - 2 * se, ymax = mean_time + 2 * se),
+    position = position_dodge2(width = 0.9, preserve = "single"),
+  ) +
+  geom_text(aes(y = 1, label = reason),
+    position = position_dodge2(width = 0.9, preserve = "single"),
+    angle = 90, colour = "black", vjust = 0.5, hjust = 0, size = 2.5
+  ) +
+  facet_grid(rows = vars(network), labeller = labeller(network = toupper)) +
+  geom_hline(yintercept = TIMEOUT_S, linetype = "dashed", color = "orange") +
+  theme_bw() +
+  scale_x_discrete(name = "Query size") +
+  coord_transform(y = "log10", ylim = c(1, TIMEOUT_S)) +
+  scale_y_continuous(
+    name = "Time (s)",
+    breaks = c(1, 10, 100, 1000, TIMEOUT_S),
+    labels = c("1", "10", "100", "1000", "14400")
+  ) +
+  scale_fill_manual(name = "", values = METHOD_COLORS) +
+  theme(
+    strip.text = element_text(size = 10),
+    axis.title = element_text(size = 10),
+    axis.text = element_text(size = 9),
+    axis.text.x = element_text(size = 8),
+    axis.title.y = element_blank(),
+    legend.text = element_text(size = 9),
     legend.title = element_blank(),
     legend.position = "bottom",
-    plot.margin = margin(b = -10, t = 5, r = 5, l = 5)
+    legend.key.size = unit(10, "pt"),
+    legend.box.spacing = unit(3, "pt"),
+    legend.margin = margin(0, 0, 0, 0),
+    axis.title.x = element_text(margin = margin(t = 2)),
+    plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
   )
-ggsave("cold-train-core-decomp.pdf", width = 122, height = 60, units = "mm")
+
+fig_core + fig_commsearch +
+  plot_layout(guides = "collect") +
+  plot_annotation(theme = theme(legend.box.spacing = unit(3, "pt"))) &
+  theme(legend.position = "bottom")
+
+ggsave("train-core-commsearch.pdf", width = 122, height = 80, units = "mm")
 
 
-#### ============ community search =============
+#### ============ testing community search =============
 
 data <- read_parquet("commsearch.parquet")
 data |> head()
@@ -144,152 +190,10 @@ offline |>
   filter(status == "timeout") |>
   count(network, method, stage)
 
-## one palette for both commsearch figures, so a method keeps its colour
-## whichever figure it appears in
-METHOD_COLORS <- c(
-  "SteinerKCore" = "#F8766D",
-  "Par-ShellStruct" = "#7CAE00",
-  "LocalKCore" = "#00BFC4",
-  "LocalKCore(u)" = "#C77CFF",
-  "CSK" = "#00A9FF",
-  "ShellStruct" = "#FF61CC"
-)
-
-### figure: training comparison of our own three methods
-
-data |>
-  filter(experiment == "training") |>
-  pivot_wider(names_from = stat, values_from = value) |>
-  mutate(status = as_status(status)) |>
-  group_by(network, method, size, rep) |>
-  summarise(
-    time = sum(if_else(stage == "online", coalesce(query_s, wall_s), wall_s)),
-    status = max(status),
-    .groups = "drop"
-  ) |>
-  mutate(time = if_else(status == "ok", time, TIMEOUT_S)) |>
-  group_by(network, method, size) |>
-  summarise(
-    mean_time = mean(time),
-    q1 = quantile(time, 0.10),
-    q3 = quantile(time, 0.90),
-    n_fail = sum(status != "ok"),
-    n = n(),
-    worst = max(status),
-    se = sd(time) / sqrt(n()),
-    .groups = "drop"
-  ) |>
-  mutate(
-    reason = fail_label(n_fail, n, worst),
-    method = factor(method,
-      levels = c("steiner", "par-shellstruct", "local", "local-upper"),
-      labels = c("SteinerKCore", "Par-ShellStruct", "LocalKCore", "LocalKCore(u)")
-    ),
-    size = factor(size)
-  ) |>
-  ggplot(aes(x = size, y = mean_time, fill = method)) +
-  geom_col(position = position_dodge2(width = 0.9, preserve = "single"), ) +
-  geom_errorbar(aes(ymin = mean_time - 2 * se, ymax = mean_time + 2 * se),
-    position = position_dodge2(width = 0.9, preserve = "single"),
-  ) +
-  geom_text(aes(y = 1, label = reason),
-    position = position_dodge2(width = 0.9, preserve = "single"),
-    angle = 90, colour = "black", vjust = 0.5, hjust = 0
-  ) +
-  facet_grid(rows = vars(network)) +
-  geom_hline(yintercept = TIMEOUT_S, linetype = "dashed", color = "orange") +
-  theme_bw() +
-  scale_x_discrete(name = "Query size") +
-  coord_transform(y = "log10", ylim = c(1, TIMEOUT_S)) +
-  scale_y_continuous(
-    name = "Time (s)",
-    breaks = c(1, 10, 100, 1000, TIMEOUT_S),
-    labels = c("1", "10", "100", "1000", "14400")
-  ) +
-  scale_fill_manual(name = "", values = METHOD_COLORS) +
-  theme(
-    strip.text = element_text(size = 10),
-    axis.title = element_text(size = 12),
-    axis.text = element_text(size = 10),
-    legend.text = element_text(size = 8),
-    legend.title = element_blank(),
-    legend.position = "bottom",
-    legend.box.spacing = unit(3, "pt"),
-    legend.margin = margin(0, 0, 0, 0),
-    axis.title.x = element_text(margin = margin(t = 2)),
-    plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
-  )
-
-ggsave("train-commsearch.pdf", width = 122, height = 80, units = "mm")
-
 ### figure: testing commsearch
 
 METHODS <- c("steiner", "par-shellstruct", "csk", "shellstruct")
 NETWORKS <- c("livejournal", "bitcoin", "wikipedia_link", "microsoft_concept", "dbpedia_link", "twitter_social", "friendster")
-
-do_plot <- function(df) {
-  df |>
-    group_by(network, method, size, batch) |>
-    summarise(
-      wall_s = mean(time),
-      wall_s_q1 = quantile(time, 0.10),
-      wall_s_q3 = quantile(time, 0.90),
-      n_fail = sum(status != "ok"),
-      n = n(),
-      worst = max(status),
-      se = sd(time) / sqrt(n()),
-      .groups = "drop"
-    ) |>
-    mutate(
-      worst = case_match(as.character(worst), "failed" ~ "oom", .default = as.character(worst)),
-      reason = fail_label(n_fail, n, worst),
-      method = factor(method,
-        levels = METHODS,
-        labels = c("SteinerKCore", "Par-ShellStruct", "CSK", "ShellStruct")
-      ),
-      network = factor(network, levels = NETWORKS)
-    ) |>
-    ggplot(aes(x = network, y = wall_s, fill = method)) +
-    geom_col(position = position_dodge2(width = 0.9, preserve = "single")) +
-    geom_errorbar(aes(ymin = wall_s - 2 * se, ymax = wall_s + 2 * se),
-      position = position_dodge2(width = 0.9, preserve = "single")
-    ) +
-    geom_text(aes(y = 1, label = reason),
-      position = position_dodge2(width = 0.9, preserve = "single"),
-      angle = 90, colour = "black", vjust = 0.5, hjust = 0,
-    ) +
-    geom_hline(yintercept = TIMEOUT_S, linetype = "dashed", color = "orange") +
-    facet_wrap(
-      vars(size, batch),
-      ncol = 1,
-      labeller = labeller(
-        size = function(x) str_c("n = ", x),
-        batch = function(x) str_c("b = ", x),
-        .multi_line = FALSE
-      )
-    ) +
-    theme_bw() +
-    scale_x_discrete(name = "") +
-    coord_transform(y = "log10", ylim = c(0.1, TIMEOUT_S)) +
-    scale_y_continuous(
-      name = "Runtime (s)",
-      breaks = c(0.1, 1, 10, 100, 1000, TIMEOUT_S),
-      labels = c("0.1", "1", "10", "100", "1000", "14400")
-    ) +
-    scale_fill_manual(name = "", values = METHOD_COLORS) +
-    theme(
-      axis.title = element_text(size = 12),
-      axis.text = element_text(size = 10),
-      axis.text.x = element_text(angle = 20, hjust = 1),
-      legend.text = element_text(size = 8),
-      legend.title = element_blank(),
-      legend.position = "bottom",
-      legend.box.spacing = unit(3, "pt"),
-      legend.margin = margin(0, 0, 0, 0),
-      axis.title.x = element_text(margin = margin(t = -10)),
-      plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
-    )
-}
 
 testing <- function(stages) {
   data |>
@@ -309,15 +213,70 @@ testing <- function(stages) {
     mutate(time = if_else(status == "ok", time, TIMEOUT_S))
 }
 
-testing(c("core-decomp", "offline", "online")) |>
-  filter(size %in% c(1, 20), batch %in% c(1, 100)) |>
-  do_plot()
-ggsave("test-commsearch.pdf", width = 122, height = 180, units = "mm")
+NETWORK_LABELS <- c(
+  livejournal = "LiveJournal", bitcoin = "Bitcoin", wikipedia_link = "Wikipedia",
+  microsoft_concept = "MS-Concept", dbpedia_link = "DBpedia", twitter_social = "Twitter",
+  friendster = "Friendster", abm14 = "ABM14", cen = "CEN"
+)
 
 testing(c("offline", "online")) |>
-  filter(size %in% c(1, 20), batch %in% c(1, 100), method != "shellstruct") |>
-  do_plot()
-ggsave("test-commsearch-nocore.pdf", width = 122, height = 180, units = "mm")
+  filter(method != "shellstruct", size %in% c(1, 20), batch != 5) |>
+  group_by(network, method, size, batch) |>
+  summarise(
+    wall_s = mean(time),
+    n_fail = sum(status != "ok"),
+    worst = max(status),
+    se = sd(time) / sqrt(n()),
+    .groups = "drop"
+  ) |>
+  mutate(
+    worst = case_match(as.character(worst), "failed" ~ "oom", .default = as.character(worst)),
+    reason = if_else(n_fail == 0, "", worst),
+    method = factor(method,
+      levels = METHODS,
+      labels = c("SteinerKCore", "Par-ShellStruct", "CSK", "ShellStruct")
+    ),
+    network = factor(network, levels = NETWORKS, labels = NETWORK_LABELS[NETWORKS]),
+    batch = factor(batch)
+  ) |>
+  droplevels() |>
+  complete(network, method, size, batch, fill = list(reason = "")) |>
+  ggplot(aes(x = batch, y = wall_s, fill = method)) +
+  geom_col(position = position_dodge2(width = 0.9, preserve = "single")) +
+  geom_errorbar(aes(ymin = wall_s - 2 * se, ymax = wall_s + 2 * se),
+    position = position_dodge2(width = 0.9, preserve = "single")
+  ) +
+  geom_text(aes(y = wall_s, label = reason),
+    position = position_dodge2(width = 0.9, preserve = "single"),
+    angle = 90, colour = "black", vjust = 0.5, hjust = 1.05, size = 2.5
+  ) +
+  geom_hline(yintercept = TIMEOUT_S, linetype = "dashed", color = "orange") +
+  facet_grid(
+    rows = vars(network), cols = vars(size),
+    labeller = labeller(size = function(x) str_c("n = ", x))
+  ) +
+  theme_bw() +
+  scale_x_discrete(name = "Batch size") +
+  coord_transform(y = "log10", ylim = c(0.1, TIMEOUT_S)) +
+  scale_y_continuous(
+    name = "Runtime (s)",
+    breaks = c(0.1, 1, 10, 100, 1000, TIMEOUT_S),
+    labels = c("0.1", "1", "10", "100", "1000", "14400")
+  ) +
+  scale_fill_manual(name = "", values = METHOD_COLORS) +
+  theme(
+    strip.text = element_text(size = 8),
+    axis.title = element_text(size = 11),
+    axis.text = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_blank(),
+    legend.position = "bottom",
+    legend.box.spacing = unit(3, "pt"),
+    legend.margin = margin(0, 0, 0, 0),
+    axis.title.x = element_text(margin = margin(t = 2)),
+    plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
+  )
+ggsave("test-commsearch.pdf", width = 122, height = 200, units = "mm")
 
 testing(c("offline", "online")) |>
   filter(
@@ -389,7 +348,7 @@ do_plot <- function(df, y, ylab, lb) {
         levels = METHODS,
         labels = c("SteinerKCore", "Par-ShellStruct")
       ),
-      network = factor(network, levels = NETWORKS)
+      network = factor(network, levels = NETWORKS, labels = NETWORK_LABELS[NETWORKS])
     ) |>
     ggplot(aes(
       x = threads, y = mean, shape = network,
@@ -623,11 +582,11 @@ plot_data |> ggplot(aes(x = log10(nodes))) +
     name = "log10(# Nodes)", limits = c(log10(26598), log10(272739486)),
     breaks = c(5, 6, 7, 8),
   ) +
-  scale_y_continuous(name = "Runtime (s)", transform = "log10", limits = c(1, 10000)) +
+  scale_y_continuous(name = "Runtime (s)", transform = "log10", limits = c(1, NULL)) +
   scale_color_identity(
     guide = "legend",
     breaks = c("#7CAE00", "#F8766D"),
-    labels = c("Par-Shellstruct", "SteinerKCore")
+    labels = c("Par-ShellStruct", "SteinerKCore")
   ) +
   theme_bw() +
   theme(
@@ -635,14 +594,17 @@ plot_data |> ggplot(aes(x = log10(nodes))) +
     axis.text = element_text(size = 10),
     legend.text = element_text(size = 8),
     legend.title = element_blank(),
-    legend.position = "bottom",
-    legend.box.spacing = unit(3, "pt"),
-    legend.margin = margin(0, 0, 0, 0),
+    legend.position = "inside",
+    legend.position.inside = c(0.015, 0.97),
+    legend.justification = c(0, 1),
+    legend.background = element_rect(fill = "white", colour = NA),
+    legend.key.size = unit(10, "pt"),
+    legend.margin = margin(2, 4, 2, 2),
     axis.title.x = element_text(margin = margin(t = 0)),
     plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
   )
 
-ggsave("abm272-commsearch-scaling.pdf", width = 122, height = 60, units = "mm")
+ggsave("abm272-commsearch-scaling.pdf", width = 122, height = 50, units = "mm")
 
 # data |>
 #   mutate(want = if_else(stage %in% c("shellstruct-online", "steiner"), "query_s", "wall_s")) |>
