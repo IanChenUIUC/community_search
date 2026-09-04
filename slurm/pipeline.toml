@@ -635,7 +635,7 @@ ${mytime} -o ${timing}-n${size}-b${batch}-rep${rep}.txt -- \
 [recipe.testing-gullo-shellstruct-offline]
 array  = true
 params = { dataset = "testing_networks" }
-deps   = ["build"]
+deps   = ["build", "testing-core-decomp(dataset=${dataset})"]
 slurm  = { cpus = 1 }
 
 dir      = "${output}/${dataset}/testing-gullo-shellstruct"
@@ -647,11 +647,12 @@ shellbin = "${dir}/shell.bin"
 
 command = """
 mkdir -p ${dir}
-vmtouch -t ${input}/${dataset}.csv
+vmtouch -t ${input}/${dataset}.csv ${testing-core-decomp.cores}
 ${mytime} -o ${timing} -- \
   ${gullo}/run.sh main.BuildIndex_PKDDJ \
     ${input}/${dataset}.csv \
     ${shellbin} \
+    ${testing-core-decomp.cores} \
   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
 

@@ -1,5 +1,8 @@
 package coreGroups;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -55,6 +58,25 @@ public class CoreGroups {
 			}
 		}
 		
+		return cores;
+	}
+
+	public static HashMap<Integer, Integer> readFromFile(String path) throws IOException {
+		HashMap<Integer, Integer> cores = new HashMap<Integer, Integer>();
+		String line;
+		String[] parts;
+
+		FileReader fileReader = new FileReader(path);
+		BufferedReader bufferedReader = new BufferedReader(fileReader);
+
+		while ((line = bufferedReader.readLine()) != null) {
+			parts = line.split(",");
+			cores.put(Integer.parseInt(parts[0].replace(" ", "")), Integer.parseInt(parts[1].replace(" ", "")));
+		}
+
+		bufferedReader.close();
+		fileReader.close();
+
 		return cores;
 	}
 	

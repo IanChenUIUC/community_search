@@ -40,9 +40,13 @@ public class TreeIndex implements IndexInterface {
     // For each node, for each shell the neighbors of the node
     private HashMap<Integer, HashMap<Integer, HashSet<Integer>>> nodeNeighbors;
 
-    public TreeIndex(Graph graph, String datasetName, String outputFile) {
+    public TreeIndex(Graph graph, String datasetName, String outputFile) throws IOException {
+        this(graph, datasetName, outputFile, null);
+    }
+
+    public TreeIndex(Graph graph, String datasetName, String outputFile, String coresFile) throws IOException {
         long startTime = System.currentTimeMillis();
-        this.computeCoreIndex(graph);
+        this.computeCoreIndex(graph, coresFile);
 
         this.computeCoreComposition(graph);
 
@@ -83,9 +87,11 @@ public class TreeIndex implements IndexInterface {
         }
     }
 
-    private void computeCoreIndex(Graph graph) {
+    private void computeCoreIndex(Graph graph, String coresFile) throws IOException {
         // Compute the core of each node
-        this.coreIndex = CoreGroups.coreGroupsAlgorithm(graph);
+        this.coreIndex = coresFile == null
+                ? CoreGroups.coreGroupsAlgorithm(graph)
+                : CoreGroups.readFromFile(coresFile);
 
         // Add each core number in the set
         HashSet<Integer> coreNumber = new HashSet<Integer>();

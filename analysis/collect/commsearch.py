@@ -14,8 +14,7 @@ STAGE_AT = 3
 
 
 def testing_shared(network, out, states):
-    """Prerequisite stages per online method, from each recipe's deps: gullo reads the raw
-    edge list so it needs no core decomposition."""
+    """Prerequisite stages per online method, from each recipe's deps."""
     core = common.read_stage(out, states, network, "testing-core-decomp", "timing.txt",
                              f"testing-core-decomp-{network}")
     par = common.read_stage(out, states, network, "testing-par-shellstruct",
@@ -27,7 +26,7 @@ def testing_shared(network, out, states):
     return {"steiner": [("core-decomp", *core)],
             "csk": [("core-decomp", *core)],
             "par-shellstruct": [("core-decomp", *core), ("offline", *par)],
-            "shellstruct": [("offline", *gullo)]}
+            "shellstruct": [("core-decomp", *core), ("offline", *gullo)]}
 
 
 def steiner_rows(network, out, states, cells, shared):

@@ -54,6 +54,7 @@ In which the `src` directory contains the implementations for global search, loc
 3. Changed `src/main/java/fromResults/ResultsReader.java:queriesReader` to read queries as a csv.
 4. Added `src/main/java/main/MyMain.java` to stop using hard-coded paths, and persist the communities.
 5. Added example network `dnc` and queries.
+6. Added an optional third argument to `main.BuildIndex_PKDDJ`: a path to a precomputed core decomposition, loaded by `coreGroups/CoreGroups.java:readFromFile` instead of running the built-in peeling.
 
 ## Example pipeline (dnc)
 
