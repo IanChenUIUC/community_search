@@ -473,8 +473,6 @@ command_file = "cmds/network-stats-extended.py"
 [recipe.cold-warm]
 params = { dataset = "training_networks" }
 deps   = ["csr-format(dataset=${dataset})"]
-# the simult phases run two processes at once, each pinned to ${threads}, so the
-# allocation is twice that and neither process contends for a core
 slurm  = { cpus = 32 }
 
 dir      = "${output}/${dataset}/cold-warm"
@@ -864,7 +862,7 @@ command_file = "cmds/strongscaling-steiner.py"
 [recipe.abm272-build-network]
 params = { year = "abm272-build-network.years" }
 deps   = ["build"]
-slurm  = { cpus = 4 }
+slurm  = { cpus = 4, mem = { param = "year", default = "128GB", 2136 = "256GB", 2141 = "256GB", 2146 = "256GB" } }
 
 years    = [2026, 2031, 2036, 2041, 2046, 2051, 2056, 2061, 2066, 2071, 2076, 2081,
             2086, 2091, 2096, 2101, 2106, 2111, 2116, 2121, 2126, 2131, 2136, 2141, 2146]
@@ -984,10 +982,6 @@ ${mytime} -o ${timing} -- \
     --threads ${slurm.cpus} \
   1> >(tee ${stdout}) 2> >(tee ${stderr} >&2)
 """
-
-### The two query recipes array over `rep` alone, so every year is its own job: any
-### (year x method) cell reruns on its own, and a per-year `slurm` mapping stays
-### array-eligible because `year` is a split key rather than an array axis.
 
 [recipe.abm272-steiner]
 array      = true
