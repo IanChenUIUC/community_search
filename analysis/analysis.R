@@ -27,7 +27,7 @@ core_decomp |>
 core_decomp |>
   filter(stat == "wall_s")
 
-fig_core <- core_decomp |>
+core_decomp |>
   select(network, method, stat, value) |>
   filter(stat == "wall_s") |>
   mutate(
@@ -39,25 +39,22 @@ fig_core <- core_decomp |>
   ) |>
   ggplot(aes(x = method, y = value)) +
   geom_col(fill = "grey50", position = "dodge") +
-  facet_grid(rows = vars(network), scales = "free_y") +
+  facet_wrap(. ~ network) +
   theme_bw() +
   scale_x_discrete(name = "Method") +
   scale_y_continuous(name = "Time (s)") +
   theme(
-    strip.text = element_blank(),
-    strip.background = element_blank(),
     axis.title = element_text(size = 10),
     axis.text = element_text(size = 9),
     axis.text.x = element_text(size = 8),
     axis.title.x = element_text(margin = margin(t = 2)),
     plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
   )
+ggsave("train-core-decomp.pdf", width = 122, height = 40, units = "mm")
 
 train_commsearch <- read_parquet("commsearch.parquet") |> filter(experiment == "training")
 train_commsearch |> head()
 
-## one palette for both commsearch figures, so a method keeps its colour
-## whichever figure it appears in
 METHOD_COLORS <- c(
   "SteinerKCore" = "#F8766D",
   "Par-ShellStruct" = "#7CAE00",
@@ -67,7 +64,8 @@ METHOD_COLORS <- c(
   "ShellStruct" = "#FF61CC"
 )
 
-fig_commsearch <- train_commsearch |>
+train_commsearch |>
+  filter(method != "par-shellstruct") |>
   pivot_wider(names_from = stat, values_from = value) |>
   mutate(status = as_status(status)) |>
   group_by(network, method, size, rep) |>
@@ -106,7 +104,7 @@ fig_commsearch <- train_commsearch |>
     position = position_dodge2(width = 0.9, preserve = "single"),
     angle = 90, colour = "black", vjust = 0.5, hjust = 0, size = 2.5
   ) +
-  facet_grid(rows = vars(network), labeller = labeller(network = toupper)) +
+  facet_wrap(. ~ network, labeller = labeller(network = toupper)) +
   geom_hline(yintercept = TIMEOUT_S, linetype = "dashed", color = "orange") +
   theme_bw() +
   scale_x_discrete(name = "Query size") +
@@ -133,12 +131,7 @@ fig_commsearch <- train_commsearch |>
     plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
   )
 
-fig_core + fig_commsearch +
-  plot_layout(guides = "collect") +
-  plot_annotation(theme = theme(legend.box.spacing = unit(3, "pt"))) &
-  theme(legend.position = "bottom")
-
-ggsave("train-core-commsearch.pdf", width = 122, height = 80, units = "mm")
+ggsave("train-commsearch.pdf", width = 122, height = 50, units = "mm")
 
 
 #### ============ testing community search =============
@@ -220,7 +213,7 @@ NETWORK_LABELS <- c(
 )
 
 testing(c("offline", "online")) |>
-  filter(method != "shellstruct", size %in% c(1, 20), batch != 5) |>
+  filter(size %in% c(1, 20), batch != 5) |>
   group_by(network, method, size, batch) |>
   summarise(
     wall_s = mean(time),
@@ -574,7 +567,7 @@ plot_data |> ggplot(aes(x = log10(nodes))) +
     color = "grey40", linewidth = 0.3
   ) +
   annotate("text",
-    x = c(log10(26598), log10(272739486)), y = 50,
+    x = c(log10(26598), log10(272739486)), y = 30,
     label = c("26,598", "272,739,486"),
     hjust = -0.1, vjust = 1, size = 3, angle = 90, color = "grey30"
   ) +
@@ -582,7 +575,7 @@ plot_data |> ggplot(aes(x = log10(nodes))) +
     name = "log10(# Nodes)", limits = c(log10(26598), log10(272739486)),
     breaks = c(5, 6, 7, 8),
   ) +
-  scale_y_continuous(name = "Runtime (s)", transform = "log10", limits = c(1, NULL)) +
+  scale_y_continuous(name = "Runtime (s)", transform = "log10", limits = c(1, TIMEOUT_S)) +
   scale_color_identity(
     guide = "legend",
     breaks = c("#7CAE00", "#F8766D"),
