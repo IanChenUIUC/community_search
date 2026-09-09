@@ -39,7 +39,7 @@ core_decomp |>
   ) |>
   ggplot(aes(x = method, y = value)) +
   geom_col(fill = "grey50", position = "dodge") +
-  facet_wrap(. ~ network) +
+  facet_wrap(. ~ network, scales = "free_y") +
   theme_bw() +
   scale_x_discrete(name = "Method") +
   scale_y_continuous(name = "Time (s)") +
@@ -249,7 +249,7 @@ testing(c("offline", "online")) |>
     labeller = labeller(size = function(x) str_c("n = ", x))
   ) +
   theme_bw() +
-  scale_x_discrete(name = "Batch size") +
+  scale_x_discrete(name = "Number of queries") +
   coord_transform(y = "log10", ylim = c(0.1, TIMEOUT_S)) +
   scale_y_continuous(
     name = "Runtime (s)",
@@ -269,7 +269,7 @@ testing(c("offline", "online")) |>
     axis.title.x = element_text(margin = margin(t = 2)),
     plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
   )
-ggsave("test-commsearch.pdf", width = 122, height = 200, units = "mm")
+ggsave("test-commsearch.pdf", width = 122, height = 160, units = "mm")
 
 testing(c("offline", "online")) |>
   filter(
@@ -311,7 +311,9 @@ NETWORKS <- c(
   "livejournal", "bitcoin", "wikipedia_link", "dbpedia_link", "abm14", "cen",
   "microsoft_concept", "twitter_social", "friendster"
 )
-SHAPES <- c(15, 16, 17, 18, 3, 4, 8, 0, 1)
+SCALING_NETWORKS <- c(bitcoin = "Small", wikipedia_link = "Medium", friendster = "Large")
+SHAPES <- c(15, 16, 17)
+ALL_SHAPES <- c(15, 16, 17, 18, 3, 4, 8, 0, 1)
 THREADS <- c(1, 2, 4, 8, 16, 32, 48, 64)
 
 scaling <- read_parquet("strongscaling.parquet") |>
@@ -320,64 +322,105 @@ scaling <- read_parquet("strongscaling.parquet") |>
   group_by(network, method, threads, rep) |>
   summarise(
     time = sum(if_else(stage == "online", coalesce(query_s, wall_s), wall_s)),
-    rss = max(peak_rss_kb, na.rm = TRUE) / 1024^2,
     status = max(status),
     .groups = "drop"
   ) |>
   mutate(time = if_else(status == "ok", time, TIMEOUT_S))
 
-do_plot <- function(df, y, ylab, lb) {
-  df |>
-    group_by(network, method, threads) |>
-    summarise(
-      mean = mean({{ y }}, na.rm = TRUE),
-      q1 = quantile({{ y }}, 0.10, na.rm = TRUE),
-      q3 = quantile({{ y }}, 0.90, na.rm = TRUE),
-      se = sd({{ y }}, na.rm = TRUE) / sqrt(n()),
-      .groups = "drop"
-    ) |>
-    mutate(
-      method = factor(method,
-        levels = METHODS,
-        labels = c("SteinerKCore", "Par-ShellStruct")
-      ),
-      network = factor(network, levels = NETWORKS, labels = NETWORK_LABELS[NETWORKS])
-    ) |>
-    ggplot(aes(
-      x = threads, y = mean, shape = network,
-      group = interaction(network, method)
-    )) +
-    geom_line(linewidth = 0.4) +
-    # geom_errorbar(aes(ymin = mean - 2 * se, ymax = mean + 2 * se), width = 0.06, linewidth = 0.3) +
-    geom_point(size = 1.8) +
-    facet_wrap(vars(method)) +
-    theme_bw() +
-    scale_x_continuous(name = "Number of CPUs", transform = "log2", breaks = THREADS) +
-    scale_y_continuous(name = ylab, transform = "log10", limits = c(lb, NA)) +
-    scale_shape_manual(name = "", values = SHAPES) +
-    guides(shape = guide_legend(order = 2, nrow = 2)) +
-    theme(
-      axis.title = element_text(size = 12),
-      axis.text = element_text(size = 8),
-      legend.text = element_text(size = 8, margin = margin(l = 1, r = 4)),
-      legend.position = "bottom",
-      legend.box = "vertical",
-      legend.box.spacing = unit(3, "pt"),
-      legend.key.size = unit(8, "pt"),
-      legend.key.spacing.x = unit(0, "pt"),
-      legend.key.spacing.y = unit(0, "pt"),
-      legend.margin = margin(0, 0, 0, 0),
-      axis.title.x = element_text(margin = margin(t = 0)),
-      plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
+scaling |>
+  filter(network %in% names(SCALING_NETWORKS)) |>
+  group_by(network, method, threads) |>
+  summarise(
+    mean = mean(time, na.rm = TRUE),
+    q1 = quantile(time, 0.10, na.rm = TRUE),
+    q3 = quantile(time, 0.90, na.rm = TRUE),
+    se = sd(time, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) |>
+  mutate(
+    method = factor(method,
+      levels = METHODS,
+      labels = c("SteinerKCore", "Par-ShellStruct")
+    ),
+    network = factor(network,
+      levels = names(SCALING_NETWORKS), labels = SCALING_NETWORKS
     )
-}
+  ) |>
+  ggplot(aes(
+    x = threads, y = mean, shape = network,
+    group = interaction(network, method)
+  )) +
+  geom_line(linewidth = 0.4) +
+  # geom_errorbar(aes(ymin = mean - 2 * se, ymax = mean + 2 * se), width = 0.06, linewidth = 0.3) +
+  geom_point(size = 1.8) +
+  facet_wrap(vars(method)) +
+  theme_bw() +
+  scale_x_continuous(name = "Number of CPUs", transform = "log2", breaks = THREADS) +
+  scale_y_continuous(name = "Runtime (s)", transform = "log10", limits = c(5, NA)) +
+  scale_shape_manual(name = "", values = SHAPES) +
+  guides(shape = guide_legend(order = 2, reverse = TRUE)) +
+  theme(
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_blank(),
+    legend.position = "inside",
+    legend.position.inside = c(0.985, 0.97),
+    legend.justification = c(1, 1),
+    legend.background = element_rect(fill = "white", colour = NA),
+    legend.key.size = unit(10, "pt"),
+    legend.margin = margin(2, 4, 2, 2),
+    axis.title.x = element_text(margin = margin(t = 0)),
+    plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
+  )
 
-scaling |> do_plot(time, "Runtime (s)", 5)
-ggsave("strongscaling-line-time.pdf", width = 122, height = 80, units = "mm")
+ggsave("strongscaling.pdf", width = 122, height = 60, units = "mm")
 
-scaling |> do_plot(rss, "Peak RSS (GB)", 0.8)
-ggsave("strongscaling-line-mem.pdf", width = 122, height = 80, units = "mm")
+scaling |>
+  group_by(network, method, threads) |>
+  summarise(
+    mean = mean(time, na.rm = TRUE),
+    q1 = quantile(time, 0.10, na.rm = TRUE),
+    q3 = quantile(time, 0.90, na.rm = TRUE),
+    se = sd(time, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) |>
+  mutate(
+    method = factor(method,
+      levels = METHODS,
+      labels = c("SteinerKCore", "Par-ShellStruct")
+    ),
+    network = factor(network, levels = NETWORKS, labels = NETWORK_LABELS[NETWORKS])
+  ) |>
+  ggplot(aes(
+    x = threads, y = mean, shape = network,
+    group = interaction(network, method)
+  )) +
+  geom_line(linewidth = 0.4) +
+  # geom_errorbar(aes(ymin = mean - 2 * se, ymax = mean + 2 * se), width = 0.06, linewidth = 0.3) +
+  geom_point(size = 1.8) +
+  facet_wrap(vars(method)) +
+  theme_bw() +
+  scale_x_continuous(name = "Number of CPUs", transform = "log2", breaks = THREADS) +
+  scale_y_continuous(name = "Runtime (s)", transform = "log10", limits = c(5, NA)) +
+  scale_shape_manual(name = "", values = ALL_SHAPES) +
+  guides(shape = guide_legend(order = 2, nrow = 2)) +
+  theme(
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 8),
+    legend.text = element_text(size = 8, margin = margin(l = 1, r = 4)),
+    legend.position = "bottom",
+    legend.box = "vertical",
+    legend.box.spacing = unit(3, "pt"),
+    legend.key.size = unit(8, "pt"),
+    legend.key.spacing.x = unit(0, "pt"),
+    legend.key.spacing.y = unit(0, "pt"),
+    legend.margin = margin(0, 0, 0, 0),
+    axis.title.x = element_text(margin = margin(t = 0)),
+    plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
+  )
 
+ggsave("strongscaling-all.pdf", width = 122, height = 80, units = "mm")
 
 #### ============ cold, warm, simult =============
 
@@ -547,35 +590,61 @@ data |>
 plot_data <- data |>
   filter(stage %in% c("core-decomp", "shellstruct-offline", "shellstruct-online", "steiner")) |>
   mutate(want = if_else(stage %in% c("shellstruct-online", "steiner"), "query_s", "wall_s")) |>
-  filter(stat == want) |>
-  group_by(year, stage, nodes) |>
-  summarize(time = mean(value), .groups = "drop") |>
-  pivot_wider(names_from = "stage", values_from = "time") |>
+  filter(stat == want | stat == "peak_rss_kb") |>
+  mutate(metric = if_else(stat == "peak_rss_kb", "rss", "time")) |>
+  group_by(year, nodes, stage, metric) |>
+  summarize(value = mean(value), .groups = "drop") |>
+  pivot_wider(names_from = "stage", values_from = "value") |>
   mutate(
-    shellstruct = `core-decomp` + `shellstruct-offline` + `shellstruct-online`,
-    steiner = `core-decomp` + steiner
+    shellstruct = if_else(metric == "time",
+      `core-decomp` + `shellstruct-offline` + `shellstruct-online`,
+      pmax(`core-decomp`, `shellstruct-offline`, `shellstruct-online`) / 1024^2
+    ),
+    steiner = if_else(metric == "time",
+      `core-decomp` + steiner,
+      pmax(`core-decomp`, steiner) / 1024^2
+    )
   ) |>
-  select(year, nodes, shellstruct, steiner)
+  select(year, nodes, metric, shellstruct, steiner) |>
+  pivot_longer(c(shellstruct, steiner), names_to = "method", values_to = "value") |>
+  mutate(
+    metric = factor(metric,
+      levels = c("time", "rss"),
+      labels = c("Runtime (s)", "Memory (GB)")
+    ),
+    color = if_else(method == "shellstruct", "#7CAE00", "#F8766D")
+  )
 
-plot_data |> ggplot(aes(x = log10(nodes))) +
-  geom_line(aes(y = shellstruct, color = "#7CAE00")) +
-  geom_line(aes(y = steiner, color = "#F8766D")) +
-  geom_point(aes(y = shellstruct, color = "#7CAE00")) +
-  geom_point(aes(y = steiner, color = "#F8766D")) +
+node_labels <- tibble(
+  metric = factor(
+    rep(c("Runtime (s)", "Memory (GB)"), each = 2),
+    levels = c("Runtime (s)", "Memory (GB)")
+  ),
+  x = rep(c(log10(26598), log10(272739486)), 2),
+  y = rep(c(10, 0.94), each = 2),
+  label = rep(c("26,598", "272,739,486"), 2)
+)
+
+plot_data |> ggplot(aes(x = log10(nodes), y = value, color = color)) +
+  geom_line() +
+  geom_point() +
   geom_vline(
     xintercept = c(log10(26598), log10(272739486)), linetype = "dashed",
     color = "grey40", linewidth = 0.3
   ) +
-  annotate("text",
-    x = c(log10(26598), log10(272739486)), y = 30,
-    label = c("26,598", "272,739,486"),
+  geom_text(
+    data = node_labels, aes(x = x, y = y, label = label), inherit.aes = FALSE,
     hjust = -0.1, vjust = 1, size = 3, angle = 90, color = "grey30"
   ) +
+  facet_grid(rows = vars(metric), scales = "free_y") +
+  facetted_pos_scales(y = list(
+    metric == "Runtime (s)" ~ scale_y_log10(name = NULL, limits = c(1, TIMEOUT_S)),
+    metric == "Memory (GB)" ~ scale_y_log10(name = NULL)
+  )) +
   scale_x_continuous(
     name = "log10(# Nodes)", limits = c(log10(26598), log10(272739486)),
     breaks = c(5, 6, 7, 8),
   ) +
-  scale_y_continuous(name = "Runtime (s)", transform = "log10", limits = c(1, TIMEOUT_S)) +
   scale_color_identity(
     guide = "legend",
     breaks = c("#7CAE00", "#F8766D"),
@@ -585,6 +654,7 @@ plot_data |> ggplot(aes(x = log10(nodes))) +
   theme(
     axis.title = element_text(size = 12),
     axis.text = element_text(size = 10),
+    strip.text = element_text(size = 10),
     legend.text = element_text(size = 8),
     legend.title = element_blank(),
     legend.position = "inside",
@@ -597,14 +667,70 @@ plot_data |> ggplot(aes(x = log10(nodes))) +
     plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
   )
 
-ggsave("abm272-commsearch-scaling.pdf", width = 122, height = 50, units = "mm")
+ggsave("abm272-commsearch-scaling.pdf", width = 122, height = 60, units = "mm")
 
-# data |>
-#   mutate(want = if_else(stage %in% c("shellstruct-online", "steiner"), "query_s", "wall_s")) |>
-#   filter(
-#     year == 2136,
-#     stage %in% c("core-decomp", "shellstruct-offline", "shellstruct-online", "steiner"),
-#     stat == want
-#   ) |>
-#   group_by(stage) |>
-#   summarize(value = mean(value))
+data |>
+  mutate(want = if_else(stage %in% c("shellstruct-online", "steiner"), "query_s", "wall_s")) |>
+  filter(
+    year == 2136,
+    stage %in% c("core-decomp", "shellstruct-offline", "shellstruct-online", "steiner"),
+    stat == want
+  ) |>
+  group_by(stage) |>
+  summarize(value = mean(value))
+
+
+#### ============ power-law exponents on abm272 =============
+
+data <- read_parquet("abm272.parquet") |> filter(status == "ok")
+
+pipelines <- data |>
+  filter(stage %in% c("core-decomp", "steiner", "shellstruct-offline", "shellstruct-online")) |>
+  mutate(want = if_else(stage %in% c("steiner", "shellstruct-online"), "query_s", "wall_s")) |>
+  filter(stat == want | stat == "peak_rss_kb") |>
+  mutate(metric = if_else(stat == "peak_rss_kb", "mem_gb", "time_s")) |>
+  group_by(metric, year, nodes, stage) |>
+  summarize(value = mean(value), .groups = "drop") |>
+  pivot_wider(names_from = "stage", values_from = "value") |>
+  mutate(
+    shellstruct = if_else(metric == "time_s",
+      `core-decomp` + `shellstruct-offline` + `shellstruct-online`,
+      pmax(`core-decomp`, `shellstruct-offline`, `shellstruct-online`)
+    ),
+    steiner = if_else(metric == "time_s",
+      `core-decomp` + steiner,
+      pmax(`core-decomp`, steiner)
+    )
+  ) |>
+  select(metric, year, nodes, shellstruct, steiner) |>
+  pivot_longer(c(shellstruct, steiner), names_to = "pipeline", values_to = "value") |>
+  mutate(value = if_else(metric == "mem_gb", value / 1e6, value))
+
+slope <- function(df) {
+  fit <- lm(log10(value) ~ log10(nodes), data = df)
+  tibble(
+    alpha = round(coef(fit)[["log10(nodes)"]], 2),
+    r2 = round(summary(fit)$r.squared, 2)
+  )
+}
+
+pipelines |>
+  filter(metric == "mem_gb", nodes >= 1e6) |>
+  group_by(pipeline) |>
+  group_modify(~ slope(.x)) |>
+  print()
+
+pipelines |>
+  filter(metric == "time_s") |>
+  mutate(range = if_else(nodes <= 5e7, "<=5e7", ">5e7")) |>
+  group_by(pipeline, range) |>
+  group_modify(~ slope(.x)) |>
+  print()
+
+# ===
+
+data <- read_parquet("abm-sizes.parquet")
+data |> head()
+data |>
+  filter(year == 2146) |>
+  mutate(kavg = 2 * edges / nodes)
