@@ -13,7 +13,7 @@ CONTAINER=/u/ianchen3/venv/python_bootstrap-sandbox
 UTIL=/u/ianchen3/community_search/src/utilities
 INPUT=/u/ianchen3/community_search/input
 
-exec apptainer exec "$CONTAINER" bash -c "
+exec apptainer exec -B /scratch:/scratch -B /projects:/projects "$CONTAINER" bash -c "
   set -euo pipefail
   uv run --project $UTIL $UTIL/pq2csv.py \
     $INPUT/abm272.edgelist.parquet \

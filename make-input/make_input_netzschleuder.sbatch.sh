@@ -11,7 +11,7 @@
 set -euo pipefail
 CONTAINER=/u/ianchen3/venv/python_bootstrap-sandbox
 
-exec apptainer exec "$CONTAINER" bash -c "
+exec apptainer exec -B /scratch:/scratch -B /projects:/projects "$CONTAINER" bash -c "
   cd /u/ianchen3/community_search/make-input
   .venv/bin/python netzschleuder.py
   uv run --project /u/ianchen3/community_search/src/utilities databank.py
