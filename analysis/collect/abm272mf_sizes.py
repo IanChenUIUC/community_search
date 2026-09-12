@@ -28,7 +28,7 @@ def main(root):
     root = pathlib.Path(root)
     spec = common.load_spec(root / "slurm" / "pipeline.toml")
     out = root / "output"
-    csv = root / "analysis" / "abm-sizes.csv"
+    csv = root / "analysis" / "abm272mf-sizes.csv"
 
     rows = []
     for year in spec["recipe"]["abm272-build-network"]["years"]:
