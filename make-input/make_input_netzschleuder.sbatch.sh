@@ -1,4 +1,5 @@
 #!/bin/bash
+#SBATCH --job-name=make-input-netzschleuder
 #SBATCH --time=04:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
