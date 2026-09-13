@@ -15,6 +15,11 @@ testing_networks  = ["bitcoin", "dbpedia_link", "friendster", "livejournal",
                      "microsoft_concept", "twitter_social", "wikipedia_link"]
 training_networks = ["abm14", "cen"]
 
+scaling_networks  = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster",
+                     "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"]
+# scaling_networks  = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal",
+#                      "microsoft_concept", "twitter_social", "wikipedia_link", "abm272"]
+
 threadcounts = [1, 2, 4, 8, 16, 32, 48, 64]
 
 util     = "${root}/src/utilities"
@@ -748,10 +753,9 @@ interpreter  = "${util}/.venv/bin/python"
 command_file = "cmds/traincs-local.py"
 
 [recipe.strongscaling-genquery]
-array  = true
-params = { dataset = "all_networks" }
+params = { dataset = "scaling_networks" }
 deps   = ["csr-format(dataset=${dataset})"]
-slurm  = { cpus = 1 }
+slurm  = { cpus = 1, mem = "64GB" }
 
 dir       = "${output}/${dataset}/strongscaling"
 stdout    = "${dir}/genquery-stdout.txt"
@@ -759,7 +763,8 @@ stderr    = "${dir}/genquery-stderr.txt"
 timing    = "${dir}/genquery-timing.txt"
 size      = 5
 batch     = 32
-nreps     = 10
+nreps     = 5
+reps      = "0..4"
 querybase = "${dir}/genquery-n${size}-b${batch}-r${nreps}"
 
 command = """
@@ -776,11 +781,9 @@ ${mytime} -o ${timing} -- \
 """
 
 [recipe.strongscaling-core-decomp]
-array      = true
-array_axes = ["dataset"]
-params     = { dataset = "all_networks", threads = "threadcounts" }
+params     = { dataset = "scaling_networks", threads = "threadcounts" }
 deps       = ["csr-format(dataset=${dataset})"]
-slurm      = { cpus = "${threads}", mem = "128GB" }
+slurm      = { cpus = "${threads}", mem = "64GB", partition = "folkvangr" }
 
 dir    = "${output}/${dataset}/strongscaling"
 stdout = "${dir}/coredecomp-stdout-t${threads}.txt"
@@ -802,12 +805,10 @@ ${mytime} -o ${timing} -- \
 """
 
 [recipe.strongscaling-shellstruct]
-array      = true
-array_axes = ["dataset"]
-params     = { dataset = "all_networks", threads = "threadcounts" }
+params     = { dataset = "scaling_networks", threads = "threadcounts" }
 deps       = ["csr-format(dataset=${dataset})",
               "strongscaling-core-decomp(dataset=${dataset}, threads=${threads})"]
-slurm      = { cpus = "${threads}", mem = "128GB" }
+slurm      = { cpus = "${threads}", mem = "64GB", partition = "folkvangr" }
 
 dir    = "${output}/${dataset}/strongscaling"
 stdout = "${dir}/shellstruct-stdout-t${threads}.txt"
@@ -830,11 +831,10 @@ ${mytime} -o ${timing} -- \
 """
 
 [recipe.strongscaling-shellstruct-online]
-array  = true
-params = { dataset = "all_networks" }
-deps   = ["strongscaling-shellstruct(dataset=${dataset}, threads=1)",
+params = { dataset = "scaling_networks" }
+deps   = ["strongscaling-shellstruct(dataset=${dataset}, threads=16)",
           "strongscaling-genquery(dataset=${dataset})"]
-slurm  = { cpus = 1 }
+slurm  = { cpus = 1, mem = "64GB", partition = "folkvangr" }
 
 dir    = "${output}/${dataset}/strongscaling"
 stdout = "${dir}/shellstruct-online-stdout.txt"
@@ -846,16 +846,16 @@ command_file = "cmds/strongscaling-shellstruct-online.py"
 
 [recipe.strongscaling-steiner]
 array      = true
-array_axes = ["dataset"]
-params     = { dataset = "all_networks", threads = "threadcounts" }
+array_axes = ["rep"]
+params     = { dataset = "scaling_networks", threads = "threadcounts", rep = "strongscaling-genquery.reps" }
 deps       = ["csr-format(dataset=${dataset})", "strongscaling-genquery(dataset=${dataset})",
               "strongscaling-core-decomp(dataset=${dataset}, threads=${threads})"]
-slurm      = { cpus = "${threads}", mem = "128GB" }
+slurm      = { cpus = "${threads}", partition = "folkvangr", mem = { param = "threads", default = "128GB", 1 = "48GB", 2 = "48GB", 4 = "48GB", 8 = "64GB", 16 = "96GB" } }
 
 dir    = "${output}/${dataset}/strongscaling"
-stdout = "${dir}/steiner-stdout-t${threads}.txt"
-stderr = "${dir}/steiner-stderr-t${threads}.txt"
-timing = "${dir}/steiner-timing-t${threads}"
+stdout = "${dir}/steiner-stdout-t${threads}-rep${rep}.txt"
+stderr = "${dir}/steiner-stderr-t${threads}-rep${rep}.txt"
+timing = "${dir}/steiner-timing-t${threads}-rep${rep}.txt"
 
 interpreter  = "${util}/.venv/bin/python"
 command_file = "cmds/strongscaling-steiner.py"

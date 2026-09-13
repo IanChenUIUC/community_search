@@ -26,18 +26,18 @@ def thread_shared(network, out, states, threads):
 
 
 def steiner_rows(network, out, states, threads, reps, size, batch, shared):
-    """strongscaling-steiner: one job per thread count, but its driver runs each rep as its
-    own process, so every rep has its own mytime and querytimes file."""
+    """strongscaling-steiner: one array task per rep, so every rep has its own node, mytime
+    and querytimes file."""
     d = out / network / DIR
-    node = f"strongscaling-steiner-{network}-{threads}"
-    task = states.get(node)
 
     rows = []
     for rep in reps:
+        node = f"strongscaling-steiner-{network}-{threads}-{rep}"
+        task = states.get(node)
         mytime = common.read_mytime(d / f"steiner-timing-t{threads}-rep{rep}.txt")
         key = [network, "steiner", "online", threads, size, batch, rep]
         common.emit(rows, key, mytime,
-                    common.row_status(f"{node} rep{rep}", mytime, task),
+                    common.row_status(node, mytime, task),
                     common.querytimes(d / f"steiner-querytimes-t{threads}-rep{rep}.csv",
                                       "pycs"))
         common.emit_shared(rows, key, shared, STAGE_AT)
@@ -81,7 +81,7 @@ def main(root):
     reps = range(genquery["nreps"])
 
     rows = []
-    for network in spec["defaults"]["all_networks"]:
+    for network in spec["defaults"]["scaling_networks"]:
         for threads in spec["defaults"]["threadcounts"]:
             shared = thread_shared(network, out, states, threads)
             rows += steiner_rows(network, out, states, threads, reps, size, batch,

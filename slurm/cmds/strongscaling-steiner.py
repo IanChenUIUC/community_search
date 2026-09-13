@@ -10,7 +10,7 @@ INDICES32 = "${csr-format.indices32}"
 CORES     = "${strongscaling-core-decomp.cores}"
 QUERYBASE = "${strongscaling-genquery.querybase}"
 BATCH     = "${strongscaling-genquery.batch}"
-NREPS     = int("${strongscaling-genquery.nreps}")
+REP       = "${rep}"
 DIR       = "${dir}"
 TIMING    = "${timing}"
 THREADS   = "${threads}"
@@ -22,11 +22,10 @@ tee_streams("${stdout}", "${stderr}")
 use_pyarrow_libs(PYTHON)
 subprocess.run(["vmtouch", "-t", INDPTR, INDICES32, CORES], check=True)
 
-for rep in range(NREPS):
-    subprocess.run(
-        [*MYTIME, "-o", f"{TIMING}-rep{rep}.txt", "--", PYTHON, STEINER,
-         INDPTR, INDICES32, CORES, f"{QUERYBASE}/query{rep}.csv",
-         f"{DIR}/steiner-querytimes-t{THREADS}-rep{rep}.csv",
-         "-t", THREADS, "-b", BATCH],
-        check=True,
-    )
+subprocess.run(
+    [*MYTIME, "-o", TIMING, "--", PYTHON, STEINER,
+     INDPTR, INDICES32, CORES, f"{QUERYBASE}/query{REP}.csv",
+     f"{DIR}/steiner-querytimes-t{THREADS}-rep{REP}.csv",
+     "-t", THREADS, "-b", BATCH],
+    check=True,
+)
