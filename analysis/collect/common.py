@@ -37,24 +37,28 @@ def load_spec(path):
 
 def task_states(path):
     """Map each node name in run.jsonl to its latest {state, elapsed, max_rss, job_id}."""
-    nodes, latest = {}, {}
+    submits, latest = {}, {}
     with open(path) as f:
         for line in f:
             r = json.loads(line)
+            key = (r["unit"], r.get("job_id"))
             if r.get("nodes"):
-                nodes[r["unit"]] = r["nodes"]
-            latest[r["unit"]] = r
+                submits[key] = r
+            latest[key] = r
 
     states = {}
-    for unit, names in nodes.items():
-        record = latest.get(unit, {})
-        tasks = record.get("tasks") or {}
-        for i, name in enumerate(names):
-            task = tasks.get(str(i), {})
-            states[name] = {"state": task.get("state", record.get("state")),
-                            "elapsed": task.get("elapsed", record.get("elapsed")),
-                            "max_rss": task.get("max_rss", record.get("max_rss")),
-                            "job_id": record.get("job_id")}
+    for key, submit in submits.items():
+        record = latest[key]
+        names, tasks = submit["nodes"], record.get("tasks") or {}
+        indices = submit.get("indices")
+        for i in range(len(names)) if indices is None else indices:
+            if i >= len(names):
+                continue
+            task = tasks.get(str(i)) or {}
+            states[names[i]] = {"state": task.get("state", record.get("state")),
+                                "elapsed": task.get("elapsed", record.get("elapsed")),
+                                "max_rss": task.get("max_rss", record.get("max_rss")),
+                                "job_id": record.get("job_id")}
     return states
 
 
