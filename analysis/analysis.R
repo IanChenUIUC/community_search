@@ -137,6 +137,7 @@ ggsave("train-commsearch.pdf", width = 122, height = 50, units = "mm")
 
 data <- read_parquet("commsearch.parquet")
 data |> head()
+data |> count(network)
 
 online <- data |>
   filter(stage == "online") |>
@@ -145,12 +146,12 @@ online <- data |>
 online |> head()
 online |> count(status)
 
-## all failures from shellstruct online
+## failures from shellstruct online, and from csk on friendster and twitter_social
 online |>
   filter(status == "failed") |>
   count(experiment, network, method)
 
-## csk oom on friendster and twitter_social
+## csk oom on abm272, friendster and twitter_social
 online |>
   filter(status == "oom") |>
   count(experiment, network, method)
@@ -167,7 +168,7 @@ offline <- data |>
 offline |> head()
 offline |> count(status)
 
-## shellstruct runs out of memory on 3 networks
+## shellstruct runs out of memory on 4 networks
 ## (oom diagnosed from logs)
 offline |>
   filter(status == "failed") |>
@@ -185,7 +186,7 @@ offline |>
 ### figure: testing commsearch
 
 METHODS <- c("steiner", "par-shellstruct", "csk", "shellstruct")
-NETWORKS <- c("livejournal", "bitcoin", "wikipedia_link", "microsoft_concept", "dbpedia_link", "twitter_social", "friendster")
+NETWORKS <- c("livejournal", "bitcoin", "wikipedia_link", "microsoft_concept", "dbpedia_link", "twitter_social", "friendster", "abm272")
 
 testing <- function(stages) {
   data |>
@@ -208,7 +209,7 @@ testing <- function(stages) {
 NETWORK_LABELS <- c(
   livejournal = "LiveJournal", bitcoin = "Bitcoin", wikipedia_link = "Wikipedia",
   microsoft_concept = "MS-Concept", dbpedia_link = "DBpedia", twitter_social = "Twitter",
-  friendster = "Friendster", abm14 = "ABM14", cen = "CEN"
+  friendster = "Friendster", abm272 = "ABM272", abm14 = "ABM14", cen = "CEN"
 )
 
 testing(c("offline", "online")) |>
@@ -367,7 +368,7 @@ data |>
 METHODS <- c("steiner", "par-shellstruct")
 NETWORKS <- c(
   "livejournal", "bitcoin", "wikipedia_link", "dbpedia_link", "abm14", "cen",
-  "microsoft_concept", "twitter_social", "friendster"
+  "microsoft_concept", "twitter_social", "friendster", "abm272"
 )
 SCALING_NETWORKS <- c(bitcoin = "Small", wikipedia_link = "Medium", friendster = "Large")
 SHAPES <- c(15, 16, 17)
