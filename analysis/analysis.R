@@ -39,7 +39,7 @@ core_decomp |>
   ) |>
   ggplot(aes(x = method, y = value)) +
   geom_col(fill = "grey50", position = "dodge") +
-  facet_wrap(. ~ network, scales = "free_y") +
+  facet_wrap(. ~ network) +
   theme_bw() +
   scale_x_discrete(name = "Method") +
   scale_y_continuous(name = "Time (s)") +
@@ -120,7 +120,6 @@ train_commsearch |>
     axis.title = element_text(size = 10),
     axis.text = element_text(size = 9),
     axis.text.x = element_text(size = 8),
-    axis.title.y = element_blank(),
     legend.text = element_text(size = 9),
     legend.title = element_blank(),
     legend.position = "bottom",
@@ -270,6 +269,65 @@ testing(c("offline", "online")) |>
     plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
   )
 ggsave("test-commsearch.pdf", width = 122, height = 160, units = "mm")
+
+testing(c("offline", "online")) |>
+  filter(size %in% c(5, 10), batch != 5) |>
+  group_by(network, method, size, batch) |>
+  summarise(
+    wall_s = mean(time),
+    n_fail = sum(status != "ok"),
+    worst = max(status),
+    se = sd(time) / sqrt(n()),
+    .groups = "drop"
+  ) |>
+  mutate(
+    worst = case_match(as.character(worst), "failed" ~ "oom", .default = as.character(worst)),
+    reason = if_else(n_fail == 0, "", worst),
+    method = factor(method,
+      levels = METHODS,
+      labels = c("SteinerKCore", "Par-ShellStruct", "CSK", "ShellStruct")
+    ),
+    network = factor(network, levels = NETWORKS, labels = NETWORK_LABELS[NETWORKS]),
+    batch = factor(batch)
+  ) |>
+  droplevels() |>
+  complete(network, method, size, batch, fill = list(reason = "")) |>
+  ggplot(aes(x = batch, y = wall_s, fill = method)) +
+  geom_col(position = position_dodge2(width = 0.9, preserve = "single")) +
+  geom_errorbar(aes(ymin = wall_s - 2 * se, ymax = wall_s + 2 * se),
+    position = position_dodge2(width = 0.9, preserve = "single")
+  ) +
+  geom_text(aes(y = wall_s, label = reason),
+    position = position_dodge2(width = 0.9, preserve = "single"),
+    angle = 90, colour = "black", vjust = 0.5, hjust = 1.05, size = 2.5
+  ) +
+  geom_hline(yintercept = TIMEOUT_S, linetype = "dashed", color = "orange") +
+  facet_grid(
+    rows = vars(network), cols = vars(size),
+    labeller = labeller(size = function(x) str_c("n = ", x))
+  ) +
+  theme_bw() +
+  scale_x_discrete(name = "Number of queries") +
+  coord_transform(y = "log10", ylim = c(0.1, TIMEOUT_S)) +
+  scale_y_continuous(
+    name = "Runtime (s)",
+    breaks = c(0.1, 1, 10, 100, 1000, TIMEOUT_S),
+    labels = c("0.1", "1", "10", "100", "1000", "14400")
+  ) +
+  scale_fill_manual(name = "", values = METHOD_COLORS) +
+  theme(
+    strip.text = element_text(size = 8),
+    axis.title = element_text(size = 11),
+    axis.text = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_blank(),
+    legend.position = "bottom",
+    legend.box.spacing = unit(3, "pt"),
+    legend.margin = margin(0, 0, 0, 0),
+    axis.title.x = element_text(margin = margin(t = 2)),
+    plot.margin = margin(b = 2, t = 5, r = 5, l = 5)
+  )
+ggsave("test-commsearch-n5-n10.pdf", width = 122, height = 160, units = "mm")
 
 testing(c("offline", "online")) |>
   filter(
