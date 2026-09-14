@@ -185,7 +185,7 @@ offline |>
 
 ### figure: testing commsearch
 
-METHODS <- c("steiner", "par-shellstruct", "csk", "shellstruct")
+METHODS <- c("csk", "steiner", "par-shellstruct", "shellstruct")
 NETWORKS <- c("livejournal", "bitcoin", "wikipedia_link", "microsoft_concept", "dbpedia_link", "twitter_social", "friendster", "abm272")
 
 testing <- function(stages) {
@@ -227,14 +227,15 @@ testing(c("offline", "online")) |>
     reason = if_else(n_fail == 0, "", worst),
     method = factor(method,
       levels = METHODS,
-      labels = c("SteinerKCore", "Par-ShellStruct", "CSK", "ShellStruct")
+      labels = c("CSK", "SteinerKCore", "Par-ShellStruct", "ShellStruct")
     ),
     network = factor(network, levels = NETWORKS, labels = NETWORK_LABELS[NETWORKS]),
+    size = factor(size),
     batch = factor(batch)
   ) |>
   droplevels() |>
   complete(network, method, size, batch, fill = list(reason = "")) |>
-  ggplot(aes(x = batch, y = wall_s, fill = method)) +
+  ggplot(aes(x = size, y = wall_s, fill = method)) +
   geom_col(position = position_dodge2(width = 0.9, preserve = "single")) +
   geom_errorbar(aes(ymin = pmax(wall_s - sd, 0), ymax = wall_s + sd),
     position = position_dodge2(width = 0.9, preserve = "single")
@@ -245,11 +246,11 @@ testing(c("offline", "online")) |>
   ) +
   geom_hline(yintercept = TIMEOUT_S, linetype = "dashed", color = "orange") +
   facet_grid(
-    rows = vars(network), cols = vars(size),
-    labeller = labeller(size = function(x) str_c("n = ", x))
+    rows = vars(network), cols = vars(batch),
+    labeller = labeller(batch = function(x) str_c(x, if_else(x == "1", " query", " queries")))
   ) +
   theme_bw() +
-  scale_x_discrete(name = "Number of queries") +
+  scale_x_discrete(name = "Query size") +
   coord_transform(y = "log10", ylim = c(0.1, TIMEOUT_S)) +
   scale_y_continuous(
     name = "Runtime (s)",
@@ -258,7 +259,7 @@ testing(c("offline", "online")) |>
   ) +
   scale_fill_manual(name = "", values = METHOD_COLORS) +
   theme(
-    strip.text = element_text(size = 8),
+    strip.text = element_text(size = 7),
     axis.title = element_text(size = 11),
     axis.text = element_text(size = 8),
     legend.text = element_text(size = 8),
@@ -286,14 +287,15 @@ testing(c("offline", "online")) |>
     reason = if_else(n_fail == 0, "", worst),
     method = factor(method,
       levels = METHODS,
-      labels = c("SteinerKCore", "Par-ShellStruct", "CSK", "ShellStruct")
+      labels = c("CSK", "SteinerKCore", "Par-ShellStruct", "ShellStruct")
     ),
     network = factor(network, levels = NETWORKS, labels = NETWORK_LABELS[NETWORKS]),
+    size = factor(size),
     batch = factor(batch)
   ) |>
   droplevels() |>
   complete(network, method, size, batch, fill = list(reason = "")) |>
-  ggplot(aes(x = batch, y = wall_s, fill = method)) +
+  ggplot(aes(x = size, y = wall_s, fill = method)) +
   geom_col(position = position_dodge2(width = 0.9, preserve = "single")) +
   geom_errorbar(aes(ymin = pmax(wall_s - sd, 0), ymax = wall_s + sd),
     position = position_dodge2(width = 0.9, preserve = "single")
@@ -304,11 +306,11 @@ testing(c("offline", "online")) |>
   ) +
   geom_hline(yintercept = TIMEOUT_S, linetype = "dashed", color = "orange") +
   facet_grid(
-    rows = vars(network), cols = vars(size),
-    labeller = labeller(size = function(x) str_c("n = ", x))
+    rows = vars(network), cols = vars(batch),
+    labeller = labeller(batch = function(x) str_c(x, if_else(x == "1", " query", " queries")))
   ) +
   theme_bw() +
-  scale_x_discrete(name = "Number of queries") +
+  scale_x_discrete(name = "Query size") +
   coord_transform(y = "log10", ylim = c(0.1, TIMEOUT_S)) +
   scale_y_continuous(
     name = "Runtime (s)",
@@ -434,6 +436,11 @@ scaling |>
   )
 
 ggsave("strongscaling.pdf", width = 122, height = 60, units = "mm")
+
+NETWORKS <- c(
+  "livejournal", "bitcoin", "wikipedia_link", "dbpedia_link", "abm14", "cen",
+  "microsoft_concept", "twitter_social", "friendster"
+)
 
 scaling |>
   group_by(network, method, threads) |>
