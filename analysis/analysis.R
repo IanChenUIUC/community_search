@@ -83,7 +83,7 @@ train_commsearch |>
     n_fail = sum(status != "ok"),
     n = n(),
     worst = max(status),
-    se = sd(time) / sqrt(n()),
+    sd = sd(time),
     .groups = "drop"
   ) |>
   mutate(
@@ -97,7 +97,7 @@ train_commsearch |>
   ) |>
   ggplot(aes(x = size, y = mean_time, fill = method)) +
   geom_col(position = position_dodge2(width = 0.9, preserve = "single"), ) +
-  geom_errorbar(aes(ymin = mean_time - 2 * se, ymax = mean_time + 2 * se),
+  geom_errorbar(aes(ymin = pmax(mean_time - sd, 0), ymax = mean_time + sd),
     position = position_dodge2(width = 0.9, preserve = "single"),
   ) +
   geom_text(aes(y = 1, label = reason),
@@ -219,7 +219,7 @@ testing(c("offline", "online")) |>
     wall_s = mean(time),
     n_fail = sum(status != "ok"),
     worst = max(status),
-    se = sd(time) / sqrt(n()),
+    sd = sd(time),
     .groups = "drop"
   ) |>
   mutate(
@@ -236,7 +236,7 @@ testing(c("offline", "online")) |>
   complete(network, method, size, batch, fill = list(reason = "")) |>
   ggplot(aes(x = batch, y = wall_s, fill = method)) +
   geom_col(position = position_dodge2(width = 0.9, preserve = "single")) +
-  geom_errorbar(aes(ymin = wall_s - 2 * se, ymax = wall_s + 2 * se),
+  geom_errorbar(aes(ymin = pmax(wall_s - sd, 0), ymax = wall_s + sd),
     position = position_dodge2(width = 0.9, preserve = "single")
   ) +
   geom_text(aes(y = wall_s, label = reason),
@@ -278,7 +278,7 @@ testing(c("offline", "online")) |>
     wall_s = mean(time),
     n_fail = sum(status != "ok"),
     worst = max(status),
-    se = sd(time) / sqrt(n()),
+    sd = sd(time),
     .groups = "drop"
   ) |>
   mutate(
@@ -295,7 +295,7 @@ testing(c("offline", "online")) |>
   complete(network, method, size, batch, fill = list(reason = "")) |>
   ggplot(aes(x = batch, y = wall_s, fill = method)) +
   geom_col(position = position_dodge2(width = 0.9, preserve = "single")) +
-  geom_errorbar(aes(ymin = wall_s - 2 * se, ymax = wall_s + 2 * se),
+  geom_errorbar(aes(ymin = pmax(wall_s - sd, 0), ymax = wall_s + sd),
     position = position_dodge2(width = 0.9, preserve = "single")
   ) +
   geom_text(aes(y = wall_s, label = reason),
