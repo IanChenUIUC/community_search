@@ -15,11 +15,6 @@ testing_networks  = ["abm272", "bitcoin", "dbpedia_link", "friendster", "livejou
                      "microsoft_concept", "twitter_social", "wikipedia_link"]
 training_networks = ["abm14", "cen"]
 
-scaling_networks  = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster",
-                     "livejournal", "microsoft_concept", "twitter_social", "wikipedia_link"]
-# scaling_networks  = ["abm14", "bitcoin", "cen", "dbpedia_link", "friendster", "livejournal",
-#                      "microsoft_concept", "twitter_social", "wikipedia_link", "abm272"]
-
 threadcounts = [1, 2, 4, 8, 16, 32, 48, 64]
 
 util     = "${root}/src/utilities"
@@ -753,7 +748,7 @@ interpreter  = "${util}/.venv/bin/python"
 command_file = "cmds/traincs-local.py"
 
 [recipe.strongscaling-genquery]
-params = { dataset = "scaling_networks" }
+params = { dataset = "all_networks" }
 deps   = ["csr-format(dataset=${dataset})"]
 slurm  = { cpus = 1, mem = "64GB" }
 
@@ -781,7 +776,7 @@ ${mytime} -o ${timing} -- \
 """
 
 [recipe.strongscaling-core-decomp]
-params     = { dataset = "scaling_networks", threads = "threadcounts" }
+params     = { dataset = "all_networks", threads = "threadcounts" }
 deps       = ["csr-format(dataset=${dataset})"]
 slurm      = { cpus = "${threads}", mem = "64GB", partition = "folkvangr" }
 
@@ -805,7 +800,7 @@ ${mytime} -o ${timing} -- \
 """
 
 [recipe.strongscaling-shellstruct]
-params     = { dataset = "scaling_networks", threads = "threadcounts" }
+params     = { dataset = "all_networks", threads = "threadcounts" }
 deps       = ["csr-format(dataset=${dataset})",
               "strongscaling-core-decomp(dataset=${dataset}, threads=${threads})"]
 slurm      = { cpus = "${threads}", mem = "64GB", partition = "folkvangr" }
@@ -831,7 +826,7 @@ ${mytime} -o ${timing} -- \
 """
 
 [recipe.strongscaling-shellstruct-online]
-params = { dataset = "scaling_networks" }
+params = { dataset = "all_networks" }
 deps   = ["strongscaling-shellstruct(dataset=${dataset}, threads=16)",
           "strongscaling-genquery(dataset=${dataset})"]
 slurm  = { cpus = 1, mem = "64GB", partition = "folkvangr" }
@@ -847,10 +842,10 @@ command_file = "cmds/strongscaling-shellstruct-online.py"
 [recipe.strongscaling-steiner]
 array      = true
 array_axes = ["rep"]
-params     = { dataset = "scaling_networks", threads = "threadcounts", rep = "strongscaling-genquery.reps" }
+params     = { dataset = "all_networks", threads = "threadcounts", rep = "strongscaling-genquery.reps" }
 deps       = ["csr-format(dataset=${dataset})", "strongscaling-genquery(dataset=${dataset})",
               "strongscaling-core-decomp(dataset=${dataset}, threads=${threads})"]
-slurm      = { cpus = "${threads}", partition = "folkvangr", mem = { param = "threads", default = "128GB", 1 = "48GB", 2 = "48GB", 4 = "48GB", 8 = "64GB", 16 = "96GB" } }
+slurm      = { cpus = "${threads}", partition = "folkvangr", mem = { param = "threads", default = "240GB", 1 = "72GB", 2 = "72GB", 4 = "72GB", 8 = "128GB", 16 = "160GB" } }
 
 dir    = "${output}/${dataset}/strongscaling"
 stdout = "${dir}/steiner-stdout-t${threads}-rep${rep}.txt"

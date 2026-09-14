@@ -81,7 +81,7 @@ def main(root):
     reps = range(genquery["nreps"])
 
     rows = []
-    for network in spec["defaults"]["scaling_networks"]:
+    for network in spec["defaults"]["all_networks"]:
         for threads in spec["defaults"]["threadcounts"]:
             shared = thread_shared(network, out, states, threads)
             rows += steiner_rows(network, out, states, threads, reps, size, batch,
