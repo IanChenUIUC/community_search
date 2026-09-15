@@ -778,7 +778,7 @@ ${mytime} -o ${timing} -- \
 [recipe.strongscaling-core-decomp]
 params     = { dataset = "all_networks", threads = "threadcounts" }
 deps       = ["csr-format(dataset=${dataset})"]
-slurm      = { cpus = "${threads}", mem = "64GB", partition = "folkvangr" }
+slurm      = { cpus = "${threads}", mem = "128GB", partition = "folkvangr", exclusive = true }
 
 dir    = "${output}/${dataset}/strongscaling"
 stdout = "${dir}/coredecomp-stdout-t${threads}.txt"
@@ -803,7 +803,7 @@ ${mytime} -o ${timing} -- \
 params     = { dataset = "all_networks", threads = "threadcounts" }
 deps       = ["csr-format(dataset=${dataset})",
               "strongscaling-core-decomp(dataset=${dataset}, threads=${threads})"]
-slurm      = { cpus = "${threads}", mem = "64GB", partition = "folkvangr" }
+slurm      = { cpus = "${threads}", mem = "128GB", partition = "folkvangr", exclusive = true }
 
 dir    = "${output}/${dataset}/strongscaling"
 stdout = "${dir}/shellstruct-stdout-t${threads}.txt"
@@ -845,7 +845,7 @@ array_axes = ["rep"]
 params     = { dataset = "all_networks", threads = "threadcounts", rep = "strongscaling-genquery.reps" }
 deps       = ["csr-format(dataset=${dataset})", "strongscaling-genquery(dataset=${dataset})",
               "strongscaling-core-decomp(dataset=${dataset}, threads=${threads})"]
-slurm      = { cpus = "${threads}", partition = "folkvangr", mem = { param = "threads", default = "240GB", 1 = "72GB", 2 = "72GB", 4 = "72GB", 8 = "128GB", 16 = "160GB" } }
+slurm      = { cpus = "${threads}", partition = "folkvangr", exclusive = true, mem ={ param = "threads", default = "240GB", 1 = "128GB", 2 = "128GB", 4 = "128GB", 8 = "128GB", 16 = "160GB" } }
 
 dir    = "${output}/${dataset}/strongscaling"
 stdout = "${dir}/steiner-stdout-t${threads}-rep${rep}.txt"
