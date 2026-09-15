@@ -18,6 +18,7 @@ fail_label <- function(n_fail, n, worst) {
 #### ============ training experiment =============
 
 TRAIN_NETWORKS <- c("cen", "abm14")
+TRAIN_LABELS <- c("CEN", "abm14")
 
 core_decomp <- read_parquet("cold-train-core-decomp.parquet")
 core_decomp |> head()
@@ -35,7 +36,7 @@ core_decomp |>
       levels = c("ib", "ucr", "gbbs", "nk", "pkc"),
       labels = c("Icebug", "UCR", "GBBS", "NK", "PKC")
     ),
-    network = factor(network, levels = TRAIN_NETWORKS)
+    network = factor(network, levels = TRAIN_NETWORKS, labels = TRAIN_LABELS)
   ) |>
   ggplot(aes(x = method, y = value)) +
   geom_col(fill = "grey50", position = "dodge") +
@@ -92,7 +93,7 @@ train_commsearch |>
       levels = c("steiner", "par-shellstruct", "local", "local-upper"),
       labels = c("SteinerKCore", "Par-ShellStruct", "LocalKCore", "LocalKCore(u)")
     ),
-    network = factor(network, levels = TRAIN_NETWORKS),
+    network = factor(network, levels = TRAIN_NETWORKS, labels = TRAIN_LABELS),
     size = factor(size)
   ) |>
   ggplot(aes(x = size, y = mean_time, fill = method)) +
@@ -104,7 +105,7 @@ train_commsearch |>
     position = position_dodge2(width = 0.9, preserve = "single"),
     angle = 90, colour = "black", vjust = 0.5, hjust = 0, size = 2.5
   ) +
-  facet_wrap(. ~ network, labeller = labeller(network = toupper)) +
+  facet_wrap(. ~ network) +
   geom_hline(yintercept = TIMEOUT_S, linetype = "dashed", color = "orange") +
   theme_bw() +
   scale_x_discrete(name = "Query size") +
@@ -209,7 +210,7 @@ testing <- function(stages) {
 NETWORK_LABELS <- c(
   livejournal = "LiveJournal", bitcoin = "Bitcoin", wikipedia_link = "Wikipedia",
   microsoft_concept = "MS-Concept", dbpedia_link = "DBpedia", twitter_social = "Twitter",
-  friendster = "Friendster", abm272 = "ABM272", abm14 = "ABM14", cen = "CEN"
+  friendster = "Friendster", abm272 = "abm272mf", abm14 = "abm14", cen = "CEN"
 )
 
 testing(c("offline", "online")) |>
@@ -259,7 +260,7 @@ testing(c("offline", "online")) |>
   ) +
   scale_fill_manual(name = "", values = METHOD_COLORS) +
   theme(
-    strip.text = element_text(size = 7),
+    strip.text = element_text(size = 6),
     axis.title = element_text(size = 11),
     axis.text = element_text(size = 8),
     legend.text = element_text(size = 8),
@@ -277,6 +278,7 @@ testing(c("offline", "online")) |>
   group_by(network, method, size, batch) |>
   summarise(
     wall_s = mean(time),
+    n = n(),
     n_fail = sum(status != "ok"),
     worst = max(status),
     sd = sd(time),
@@ -284,7 +286,11 @@ testing(c("offline", "online")) |>
   ) |>
   mutate(
     worst = case_match(as.character(worst), "failed" ~ "oom", .default = as.character(worst)),
-    reason = if_else(n_fail == 0, "", worst),
+    reason = case_when(
+      n_fail == 0 ~ "",
+      n_fail < n ~ str_c(n_fail, "/", n, " ", worst),
+      .default = worst
+    ),
     method = factor(method,
       levels = METHODS,
       labels = c("CSK", "SteinerKCore", "Par-ShellStruct", "ShellStruct")
@@ -300,9 +306,9 @@ testing(c("offline", "online")) |>
   geom_errorbar(aes(ymin = pmax(wall_s - sd, 0), ymax = wall_s + sd),
     position = position_dodge2(width = 0.9, preserve = "single")
   ) +
-  geom_text(aes(y = wall_s, label = reason),
+  geom_text(aes(y = 0.1, label = reason),
     position = position_dodge2(width = 0.9, preserve = "single"),
-    angle = 90, colour = "black", vjust = 0.5, hjust = 1.05, size = 2.5
+    angle = 90, colour = "black", vjust = 0.5, hjust = 0, size = 2.5
   ) +
   geom_hline(yintercept = TIMEOUT_S, linetype = "dashed", color = "orange") +
   facet_grid(
@@ -319,7 +325,7 @@ testing(c("offline", "online")) |>
   ) +
   scale_fill_manual(name = "", values = METHOD_COLORS) +
   theme(
-    strip.text = element_text(size = 8),
+    strip.text = element_text(size = 7),
     axis.title = element_text(size = 11),
     axis.text = element_text(size = 8),
     legend.text = element_text(size = 8),
@@ -374,8 +380,8 @@ NETWORKS <- c(
 )
 SCALING_NETWORKS <- c(bitcoin = "Small", wikipedia_link = "Medium", friendster = "Large")
 SHAPES <- c(15, 16, 17)
-ALL_SHAPES <- c(15, 16, 17, 18, 3, 4, 8, 0, 1)
-THREADS <- c(1, 2, 4, 8, 16, 32, 48, 64)
+ALL_SHAPES <- c(15, 16, 17, 18, 3, 4, 8, 0, 1, 2)
+THREADS <- c(1, 2, 4, 8, 16, 32, 64)
 
 scaling <- read_parquet("strongscaling.parquet") |>
   pivot_wider(names_from = stat, values_from = value) |>
@@ -389,7 +395,8 @@ scaling <- read_parquet("strongscaling.parquet") |>
   mutate(time = if_else(status == "ok", time, TIMEOUT_S))
 
 scaling |>
-  filter(network %in% names(SCALING_NETWORKS)) |>
+  filter(network %in% names(SCALING_NETWORKS), threads != 48) |>
+  mutate(time = pmin(time, TIMEOUT_S)) |>
   group_by(network, method, threads) |>
   summarise(
     mean = mean(time, na.rm = TRUE),
@@ -414,10 +421,18 @@ scaling |>
   geom_line(linewidth = 0.4) +
   # geom_errorbar(aes(ymin = mean - 2 * se, ymax = mean + 2 * se), width = 0.06, linewidth = 0.3) +
   geom_point(size = 1.8) +
+  geom_point(
+    data = \(d) filter(d, mean >= TIMEOUT_S),
+    shape = 1, size = 3.5, stroke = 0.6, colour = "red", show.legend = FALSE
+  ) +
   facet_wrap(vars(method)) +
   theme_bw() +
   scale_x_continuous(name = "Number of CPUs", transform = "log2", breaks = THREADS) +
-  scale_y_continuous(name = "Runtime (s)", transform = "log10", limits = c(5, NA)) +
+  scale_y_continuous(
+    name = "Runtime (s)", transform = "log10", limits = c(5, TIMEOUT_S),
+    breaks = c(10, 100, 1000, TIMEOUT_S),
+    labels = c("10", "100", "1000", "14400")
+  ) +
   scale_shape_manual(name = "", values = SHAPES) +
   guides(shape = guide_legend(order = 2, reverse = TRUE)) +
   theme(
@@ -439,10 +454,12 @@ ggsave("strongscaling.pdf", width = 122, height = 60, units = "mm")
 
 NETWORKS <- c(
   "livejournal", "bitcoin", "wikipedia_link", "dbpedia_link", "abm14", "cen",
-  "microsoft_concept", "twitter_social", "friendster"
+  "microsoft_concept", "twitter_social", "friendster", "abm272"
 )
 
 scaling |>
+  filter(threads != 48) |>
+  mutate(time = pmin(time, TIMEOUT_S)) |>
   group_by(network, method, threads) |>
   summarise(
     mean = mean(time, na.rm = TRUE),
@@ -465,10 +482,18 @@ scaling |>
   geom_line(linewidth = 0.4) +
   # geom_errorbar(aes(ymin = mean - 2 * se, ymax = mean + 2 * se), width = 0.06, linewidth = 0.3) +
   geom_point(size = 1.8) +
+  geom_point(
+    data = \(d) filter(d, mean >= TIMEOUT_S),
+    shape = 1, size = 3.5, stroke = 0.6, colour = "red", show.legend = FALSE
+  ) +
   facet_wrap(vars(method)) +
   theme_bw() +
   scale_x_continuous(name = "Number of CPUs", transform = "log2", breaks = THREADS) +
-  scale_y_continuous(name = "Runtime (s)", transform = "log10", limits = c(5, NA)) +
+  scale_y_continuous(
+    name = "Runtime (s)", transform = "log10", limits = c(5, TIMEOUT_S),
+    breaks = c(10, 100, 1000, TIMEOUT_S),
+    labels = c("10", "100", "1000", "14400")
+  ) +
   scale_shape_manual(name = "", values = ALL_SHAPES) +
   guides(shape = guide_legend(order = 2, nrow = 2)) +
   theme(
@@ -656,8 +681,8 @@ data |>
 plot_data <- data |>
   filter(stage %in% c("core-decomp", "shellstruct-offline", "shellstruct-online", "steiner")) |>
   mutate(want = if_else(stage %in% c("shellstruct-online", "steiner"), "query_s", "wall_s")) |>
-  filter(stat == want | stat == "peak_rss_kb") |>
-  mutate(metric = if_else(stat == "peak_rss_kb", "rss", "time")) |>
+  filter(stat == want | stat == "peak_rss_tree_kb") |>
+  mutate(metric = if_else(stat == "peak_rss_tree_kb", "rss", "time")) |>
   group_by(year, nodes, stage, metric) |>
   summarize(value = mean(value), .groups = "drop") |>
   pivot_wider(names_from = "stage", values_from = "value") |>
@@ -681,34 +706,20 @@ plot_data <- data |>
     color = if_else(method == "shellstruct", "#7CAE00", "#F8766D")
   )
 
-node_labels <- tibble(
-  metric = factor(
-    rep(c("Runtime (s)", "Memory (GB)"), each = 2),
-    levels = c("Runtime (s)", "Memory (GB)")
-  ),
-  x = rep(c(log10(26598), log10(272739486)), 2),
-  y = rep(c(10, 0.94), each = 2),
-  label = rep(c("26,598", "272,739,486"), 2)
-)
-
 plot_data |> ggplot(aes(x = log10(nodes), y = value, color = color)) +
   geom_line() +
   geom_point() +
-  geom_vline(
-    xintercept = c(log10(26598), log10(272739486)), linetype = "dashed",
-    color = "grey40", linewidth = 0.3
-  ) +
-  geom_text(
-    data = node_labels, aes(x = x, y = y, label = label), inherit.aes = FALSE,
-    hjust = -0.1, vjust = 1, size = 3, angle = 90, color = "grey30"
-  ) +
   facet_grid(rows = vars(metric), scales = "free_y") +
   facetted_pos_scales(y = list(
     metric == "Runtime (s)" ~ scale_y_log10(name = NULL, limits = c(1, TIMEOUT_S)),
-    metric == "Memory (GB)" ~ scale_y_log10(name = NULL)
+    metric == "Memory (GB)" ~ scale_y_continuous(
+      name = NULL, transform = "log2",
+      limits = c(0.25, 128), breaks = c(0.25, 2, 16, 128),
+      labels = c("0.25", "2", "16", "128")
+    )
   )) +
   scale_x_continuous(
-    name = "log10(# Nodes)", limits = c(log10(26598), log10(272739486)),
+    name = "log10(# Vertices)", limits = c(log10(26598), log10(272739486)),
     breaks = c(5, 6, 7, 8),
   ) +
   scale_color_identity(
@@ -735,6 +746,24 @@ plot_data |> ggplot(aes(x = log10(nodes), y = value, color = color)) +
 
 ggsave("abm272-commsearch-scaling.pdf", width = 122, height = 60, units = "mm")
 
+## peak memory per pipeline
+data |>
+  filter(
+    stage %in% c("core-decomp", "shellstruct-offline", "shellstruct-online", "steiner"),
+    stat %in% c("peak_rss_kb", "peak_rss_tree_kb")
+  ) |>
+  group_by(year, nodes, stage, stat) |>
+  summarize(value = mean(value), .groups = "drop") |>
+  pivot_wider(names_from = "stage", values_from = "value") |>
+  mutate(
+    shellstruct = pmax(`core-decomp`, `shellstruct-offline`, `shellstruct-online`) / 1024^2,
+    steiner = pmax(`core-decomp`, steiner) / 1024^2
+  ) |>
+  pivot_longer(c(shellstruct, steiner), names_to = "method", values_to = "gb") |>
+  group_by(method, stat) |>
+  summarize(max_gb = max(gb), .groups = "drop") |>
+  pivot_wider(names_from = "stat", values_from = "max_gb")
+
 data |>
   mutate(want = if_else(stage %in% c("shellstruct-online", "steiner"), "query_s", "wall_s")) |>
   filter(
@@ -753,8 +782,8 @@ data <- read_parquet("abm272.parquet") |> filter(status == "ok")
 pipelines <- data |>
   filter(stage %in% c("core-decomp", "steiner", "shellstruct-offline", "shellstruct-online")) |>
   mutate(want = if_else(stage %in% c("steiner", "shellstruct-online"), "query_s", "wall_s")) |>
-  filter(stat == want | stat == "peak_rss_kb") |>
-  mutate(metric = if_else(stat == "peak_rss_kb", "mem_gb", "time_s")) |>
+  filter(stat == want | stat == "peak_rss_tree_kb") |>
+  mutate(metric = if_else(stat == "peak_rss_tree_kb", "mem_gb", "time_s")) |>
   group_by(metric, year, nodes, stage) |>
   summarize(value = mean(value), .groups = "drop") |>
   pivot_wider(names_from = "stage", values_from = "value") |>
