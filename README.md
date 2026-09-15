@@ -4,6 +4,10 @@ This repository hosts all code and experiments for `Improved Methods for k-Core 
 We provide implementations of SteinerKCore and Par-ShellStruct, novel scalable methods for retrieving communities with large min-degree.
 In particular, given a set $Q$, return the $k$-core containing $Q$, of the largest $k$.
 
+## Supplementary Materials
+
+The supplementary materials for  `Improved Methods for k-Core Community Search` can be found at `Supplementary_Materials.pdf`.
+
 ## Recommended scripts for running community search
 
 ### Many queries
